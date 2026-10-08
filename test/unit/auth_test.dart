@@ -41,16 +41,12 @@ void main() {
       await expectLater(authRepo.sendOtp('9876543210', isNewAccount: true), completes);
     });
 
-    test('Login for non-existent account throws "Account not found. Please create an account first."', () async {
+    test('Login for non-existent account allows OTP send and rejects on verify', () async {
       const mobile = '9111222333';
-      // Not registered yet -> sendOtp for Login must fail
-      expect(
-        () => authRepo.sendOtp(mobile, isNewAccount: false),
-        throwsA(predicate((e) =>
-            e is AuthException && e.message.contains('Account not found. Please create an account first.'))),
-      );
+      // Any legitimate mobile number can start Firebase Phone Auth flow
+      await expectLater(authRepo.sendOtp(mobile, isNewAccount: false), completes);
 
-      // Verify OTP directly for Login must also reject
+      // Verify OTP directly for Login must reject non-existent account
       expect(
         () => authRepo.verifyOtpAndLogin(
           mobile: mobile,
@@ -84,9 +80,14 @@ void main() {
       expect(authRepo.isLoggedIn, true);
       expect(await cloudSync.isAccountRegistered(mobile), true);
 
-      // 3. Duplicate Create Account with same number must be rejected
+      // 3. Duplicate Create Account with same number must be rejected on verify
+      await expectLater(authRepo.sendOtp(mobile, isNewAccount: true), completes);
       expect(
-        () => authRepo.sendOtp(mobile, isNewAccount: true),
+        () => authRepo.verifyOtpAndLogin(
+          mobile: mobile,
+          otp: AppConstants.devTestOtp,
+          isNewAccount: true,
+        ),
         throwsA(predicate((e) =>
             e is AuthException && e.message.contains('An account already exists for this number'))),
       );

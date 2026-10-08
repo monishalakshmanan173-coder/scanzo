@@ -5,6 +5,7 @@ import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_typography.dart';
 import '../../../shared/widgets/scanzo_button.dart';
 import '../../../data/repositories/auth_repository.dart';
+import '../../../data/database/database_helper.dart';
 import '../../../app/routes.dart';
 import '../../../shared/widgets/scanzo_animated_background.dart';
 import '../../../shared/widgets/scanzo_logo.dart';
@@ -99,8 +100,13 @@ class _OtpScreenState extends State<OtpScreen> {
         // Go to shop type setup / business profile for new account
         Navigator.pushNamedAndRemoveUntil(context, AppRoutes.shopType, (r) => false);
       } else {
-        // Direct to Dashboard for existing user with their restored data
-        Navigator.pushNamedAndRemoveUntil(context, AppRoutes.dashboard, (r) => false);
+        // Direct to Dashboard for existing user with their restored data, or shopType if first store needed
+        final hasStores = DatabaseHelper().getAllStores().isNotEmpty;
+        if (hasStores) {
+          Navigator.pushNamedAndRemoveUntil(context, AppRoutes.dashboard, (r) => false);
+        } else {
+          Navigator.pushNamedAndRemoveUntil(context, AppRoutes.shopType, (r) => false);
+        }
       }
     } catch (e) {
       final msg = e.toString().replaceFirst(RegExp(r'^(Exception|AuthException|ValidationException):\s*'), '');

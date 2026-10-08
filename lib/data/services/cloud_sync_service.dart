@@ -115,6 +115,10 @@ class CloudSyncService {
     final backup = prefs.getString('cloud_backup_$uid');
     if (backup != null && backup.isNotEmpty) return true;
 
+    // Check remote cloud backup
+    final remoteData = await restoreUserData(uid);
+    if (remoteData != null) return true;
+
     return false;
   }
 

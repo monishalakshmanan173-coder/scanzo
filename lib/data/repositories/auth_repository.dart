@@ -49,27 +49,22 @@ class AuthRepository {
   }
 
   /// Sends a real SMS OTP to the provided 10-digit mobile number using Firebase Authentication.
-  /// For Login (isNewAccount = false), ensures the account exists before sending OTP.
-  /// For Create Account (isNewAccount = true), ensures no duplicate account exists.
+  /// Dispatches real SMS OTP across all legitimate mobile numbers.
   Future<String> sendOtp(
     String mobile, {
     bool isNewAccount = false,
     void Function(String verificationId)? onCodeSent,
     void Function(String error)? onError,
   }) async {
-    final cleaned = mobile.replaceAll(RegExp(r'\D'), '');
+    // 1. Sanitize and normalize mobile number (handle +91, 91 prefix, leading 0)
+    String cleaned = mobile.replaceAll(RegExp(r'\D'), '');
+    if (cleaned.startsWith('91') && cleaned.length == 12) {
+      cleaned = cleaned.substring(2);
+    } else if (cleaned.startsWith('0') && cleaned.length == 11) {
+      cleaned = cleaned.substring(1);
+    }
     if (cleaned.length != 10) {
       throw ValidationException('Please enter a valid 10-digit mobile number.');
-    }
-
-    // 1. Account Existence Validation
-    final accountExists = await checkAccountExists(cleaned);
-    if (!isNewAccount && !accountExists) {
-      // Login attempt for non-existent account
-      throw AuthException('Account not found. Please create an account first.');
-    } else if (isNewAccount && accountExists) {
-      // Create Account attempt for already existing account
-      throw AuthException('An account already exists for this number. Please log in instead.');
     }
 
     final formattedNumber = '+91$cleaned';
@@ -132,10 +127,13 @@ class AuthRepository {
         }
       } on FirebaseAuthException catch (e) {
         final message = _mapFirebaseError(e);
+        onError?.call(message);
         throw AuthException(message);
       } catch (e) {
         if (e is AuthException) rethrow;
-        throw AuthException('Unable to send OTP. Please check your number and internet connection.');
+        final message = _mapFirebaseError(e);
+        onError?.call(message);
+        throw AuthException(message);
       }
     } else {
       // Offline / Test environment fallback
@@ -225,7 +223,7 @@ class AuthRepository {
       }
     } else {
       // CREATE ACCOUNT FLOW: Account must not already exist
-      final hasProfile = await _cloudSync.hasAccountProfile(uid);
+      final hasProfile = await _cloudSync.hasAccountProfile(uid) || await checkAccountExists(cleanedMobile);
       if (hasProfile) {
         throw AuthException('An account already exists for this number. Please log in instead.');
       }
@@ -339,37 +337,66 @@ class AuthRepository {
     await DatabaseHelper().setActiveUserId('');
   }
 
-  String _mapFirebaseError(FirebaseAuthException e) {
-    switch (e.code) {
-      case 'invalid-verification-code':
-        return 'Invalid OTP. Please try again.';
+  String _mapFirebaseError(dynamic error) {
+    String code = '';
+    String rawMessage = '';
+
+    if (error is FirebaseAuthException) {
+      code = error.code.toLowerCase().trim();
+      rawMessage = error.message ?? '';
+    } else {
+      final str = error.toString().toLowerCase();
+      // Extract Firebase code e.g. [firebase_auth/quota-exceeded] or auth/quota-exceeded
+      final match = RegExp(r'(?:firebase_auth\/|auth\/)([a-z0-9\-]+)').firstMatch(str);
+      if (match != null) {
+        code = match.group(1)!;
+      }
+      rawMessage = error.toString();
+    }
+
+    // Strip common technical prefixes e.g. [firebase_auth/quota-exceeded]
+    rawMessage = rawMessage
+        .replaceAll(RegExp(r'\[.*?\]'), '')
+        .replaceFirst(RegExp(r'^(Exception|AuthException|FirebaseAuthException):\s*'), '')
+        .trim();
+
+    switch (code) {
       case 'invalid-phone-number':
-        return 'Enter a valid mobile number.';
-      case 'session-expired':
-        return 'The OTP has expired. Please tap "Resend Code" for a new OTP.';
+        return 'Invalid mobile number format. Please enter a valid 10-digit mobile number.';
       case 'too-many-requests':
         return 'Too many SMS requests sent to this number. Please wait a few minutes before trying again.';
       case 'quota-exceeded':
-        return 'SMS quota exceeded for today. Please try again later or contact support.';
-      case 'network-request-failed':
-        return 'Unable to send OTP. Please check your number and internet connection.';
+        return 'SMS quota exceeded for this Firebase project. Daily free tier limit reached. Please upgrade to Firebase Blaze (Pay-as-you-go) plan or try again later.';
+      case 'billing-not-enabled':
+        return 'SMS sending requires Firebase billing enabled. Please upgrade your Firebase project to the Blaze plan in Firebase Console to send SMS to real phone numbers.';
       case 'captcha-check-failed':
-        return 'reCAPTCHA verification failed. Please try again.';
-      case 'operation-not-allowed':
-        return 'Phone authentication is not enabled in Firebase Console. Please enable Phone provider in Authentication.';
+        return 'reCAPTCHA verification failed. Please refresh the browser page and ensure cookies/popups are enabled.';
+      case 'network-request-failed':
+        return 'Network connection failed. Please check your internet connection and try again.';
+      case 'app-not-authorized':
+        return 'This app or domain is not authorized. On Vercel, please add your domain in Firebase Console > Authentication > Settings > Authorized domains.';
       case 'unauthorized-domain':
-        return 'This web domain is not authorized in Firebase Console. Please add your Vercel domain under Authentication > Settings > Authorized Domains.';
+        return 'Web domain is not authorized. Please add your Vercel deployment domain to Firebase Authentication > Settings > Authorized domains.';
+      case 'operation-not-allowed':
+        return 'Phone authentication is disabled. Please enable the Phone provider in Firebase Console > Authentication > Sign-in method.';
+      case 'invalid-app-credential':
+        return 'Phone verification credentials could not be validated. Please complete the reCAPTCHA verification.';
+      case 'invalid-verification-code':
+        return 'Invalid OTP code. Please check your SMS and enter the correct 6-digit code.';
+      case 'session-expired':
+        return 'The OTP has expired. Please tap "Resend Code" to request a new OTP.';
+      case 'missing-verification-code':
+        return 'Please enter the complete 6-digit OTP code.';
       case 'invalid-api-key':
       case 'api-key-not-valid':
-        return 'Firebase API key is invalid or placeholder. Please provide a valid Firebase project API key in firebase_options.dart.';
-      case 'app-not-authorized':
-        return 'This app is not authorized to use Firebase Authentication with the provided API key.';
-      case 'invalid-app-credential':
-        return 'Phone verification failed. On Web, please complete the reCAPTCHA. On Android, verify SHA-256 fingerprint in Firebase Console.';
-      case 'missing-verification-code':
-        return 'Please enter the complete 6-digit OTP.';
+        return 'Firebase API key is invalid. Please verify your Firebase project configuration in firebase_options.dart.';
       default:
-        return 'Unable to send OTP. Please check your number and internet connection.';
+        if (rawMessage.isNotEmpty &&
+            !rawMessage.toLowerCase().contains('instance of') &&
+            !rawMessage.toLowerCase().contains('unhandled exception')) {
+          return rawMessage;
+        }
+        return 'Could not send SMS OTP. Please check your mobile number and try again.';
     }
   }
 }
