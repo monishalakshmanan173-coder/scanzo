@@ -207,17 +207,24 @@ class ExcelImportService {
 
     // Intelligent column finder matching aliases
     int? findColumnIndex(List<String> aliases) {
+      // 1. Exact match with normalized header
       for (var alias in aliases) {
         final norm = _normalizeHeader(alias);
         if (headerIndexMap.containsKey(norm)) {
           return headerIndexMap[norm];
         }
       }
-      // Partial contains match fallback
-      for (var entry in headerIndexMap.entries) {
-        for (var alias in aliases) {
-          final norm = _normalizeHeader(alias);
-          if (entry.key.contains(norm) || norm.contains(entry.key)) {
+      // 2. Contains match (guarded to avoid sub-word false positives)
+      for (var alias in aliases) {
+        final norm = _normalizeHeader(alias);
+        if (norm.length < 4) continue;
+        for (var entry in headerIndexMap.entries) {
+          if (entry.key.contains(norm)) {
+            // Guard: don't match 'productcode' / 'itemcode' for 'product' / 'item' name
+            if ((norm == 'product' || norm == 'item') &&
+                (entry.key.contains('code') || entry.key.contains('id') || entry.key.contains('num'))) {
+              continue;
+            }
             return entry.value;
           }
         }
@@ -242,10 +249,16 @@ class ExcelImportService {
       'openingstock', 'opening stock', 'currentstock', 'current stock', 'units', 'count'
     ]);
 
-    final barcodeIdx = findColumnIndex([
-      'barcode', 'barcodenumber', 'barcode number', 'ean', 'upc', 'sku', 'code',
-      'productcode', 'product code', 'itemcode', 'item code'
+    final barcodeCol = findColumnIndex([
+      'barcode', 'barcodenumber', 'barcode number', 'ean', 'upc'
     ]);
+
+    final skuCol = findColumnIndex([
+      'productcode', 'product code', 'itemcode', 'item code', 'sku', 'code'
+    ]);
+
+    final barcodeIdx = barcodeCol ?? skuCol;
+    final skuIdx = skuCol ?? barcodeCol;
 
     final categoryIdx = findColumnIndex(['category', 'cat', 'department', 'group']);
     final subcategoryIdx = findColumnIndex(['subcategory', 'subcat', 'sub category']);
@@ -286,14 +299,6 @@ class ExcelImportService {
       // Completely skip empty rows
       if (_isRowCompletelyEmpty(row)) continue;
 
-      actualRowCounter++;
-      final errors = <String>[];
-      final rawData = <String, dynamic>{};
-
-      for (int h = 0; h < headers.length && h < row.length; h++) {
-        rawData[headers[h]] = row[h];
-      }
-
       String getCellString(int? idx, [String defaultVal = '']) {
         if (idx != null && idx < row.length) {
           final val = row[idx]?.toString().trim();
@@ -308,14 +313,31 @@ class ExcelImportService {
         return _normalizePrice(str, defaultVal);
       }
 
-      // 1. Product Name (REQUIRED)
       final name = getCellString(nameIdx);
+      final sellingPriceStr = getCellString(priceIdx);
+      final barcode = getCellString(barcodeIdx);
+      final qtyStr = getCellString(qtyIdx);
+
+      // Check if this row is an unused trailing row or formatting-only artifact
+      // If it has NO product name, NO selling price, NO barcode, and NO quantity, skip it completely
+      if (name.isEmpty && sellingPriceStr.isEmpty && barcode.isEmpty && qtyStr.isEmpty) {
+        continue;
+      }
+
+      actualRowCounter++;
+      final errors = <String>[];
+      final rawData = <String, dynamic>{};
+
+      for (int h = 0; h < headers.length && h < row.length; h++) {
+        rawData[headers[h]] = row[h];
+      }
+
+      // 1. Product Name (REQUIRED)
       if (name.isEmpty) {
         errors.add('Missing Product Name');
       }
 
       // 2. Selling Price (REQUIRED, must be >= 0)
-      final sellingPriceStr = getCellString(priceIdx);
       if (sellingPriceStr.isEmpty) {
         errors.add('Missing Selling Price');
       }
@@ -325,9 +347,8 @@ class ExcelImportService {
       }
 
       // 3. Optional Fields
-      final openingStock = getCellDouble(qtyIdx, 10.0);
-      final barcode = getCellString(barcodeIdx); // preserved as STRING preserving leading zeros
-      final sku = getCellString(barcodeIdx, IdGenerator.generateId('sku'));
+      final openingStock = getCellDouble(qtyIdx, 0.0);
+      final sku = getCellString(skuIdx, IdGenerator.generateId('sku'));
       final category = getCellString(categoryIdx, 'General');
       final subcategory = getCellString(subcategoryIdx);
       final brand = getCellString(brandIdx);

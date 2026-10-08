@@ -3,6 +3,7 @@ import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_typography.dart';
 import '../../../shared/widgets/scanzo_button.dart';
 import '../../../data/models/shop_type.dart';
+import '../../../shared/widgets/scanzo_logo.dart';
 import '../../../app/routes.dart';
 
 class ShopTypeScreen extends StatefulWidget {
@@ -22,7 +23,14 @@ class _ShopTypeScreenState extends State<ShopTypeScreen> {
     return Scaffold(
       backgroundColor: AppColors.backgroundCream,
       appBar: AppBar(
-        title: const Text('Select Business Type'),
+        title: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const ScanzoLogo.icon(size: 28),
+            const SizedBox(width: 10),
+            const Text('Select Business Type'),
+          ],
+        ),
         centerTitle: false,
       ),
       body: SafeArea(

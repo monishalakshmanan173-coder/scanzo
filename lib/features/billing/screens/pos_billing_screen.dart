@@ -14,6 +14,7 @@ import '../../../data/repositories/billing_repository.dart';
 import '../../../data/repositories/customer_repository.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import '../../../data/repositories/business_repository.dart';
+import '../../../shared/widgets/scanzo_logo.dart';
 import '../../../app/routes.dart';
 
 class PosBillingScreen extends StatefulWidget {
@@ -91,18 +92,10 @@ class _PosBillingScreenState extends State<PosBillingScreen> {
       return;
     }
 
-    setState(() {
-      if (_cartItems.containsKey(product.id)) {
-        final existing = _cartItems[product.id]!;
-        final newQty = existing.quantity + 1;
-        if (newQty > product.currentStock) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Cannot add more than available stock (${product.currentStock.toStringAsFixed(0)})')),
-          );
-          return;
-        }
-        _updateItemQty(product.id, newQty);
-      } else {
+    if (_cartItems.containsKey(product.id)) {
+      _increaseItemQty(product.id);
+    } else {
+      setState(() {
         final price = product.sellingPrice;
         final gstAmt = (price * product.gstRate) / 100.0;
         final total = price + gstAmt;
@@ -122,16 +115,60 @@ class _PosBillingScreenState extends State<PosBillingScreen> {
           gstAmount: gstAmt,
           totalAmount: total,
         );
-      }
+        _updatePaidAmountToTotal();
+      });
+    }
+  }
+
+  void _increaseItemQty(String productId) {
+    final item = _cartItems[productId];
+    if (item == null) return;
+
+    final prod = _productRepo.getProductById(productId) ??
+        _allProducts.where((p) => p.id == productId).firstOrNull;
+
+    if (prod != null && item.quantity + 1 > prod.currentStock) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Cannot add more than available stock (${prod.currentStock.toStringAsFixed(0)})'),
+          duration: const Duration(seconds: 2),
+        ),
+      );
+      return;
+    }
+
+    _updateItemQty(productId, item.quantity + 1);
+  }
+
+  void _decreaseItemQty(String productId) {
+    final item = _cartItems[productId];
+    if (item == null) return;
+
+    if (item.quantity <= 1) {
+      // Quantity cannot reduce below 1 via minus button
+      return;
+    }
+
+    _updateItemQty(productId, item.quantity - 1);
+  }
+
+  void _removeFromCart(String productId) {
+    setState(() {
+      _cartItems.remove(productId);
       _updatePaidAmountToTotal();
     });
   }
 
   void _updateItemQty(String productId, double newQty) {
     if (newQty <= 0) {
-      _cartItems.remove(productId);
-    } else {
-      final item = _cartItems[productId]!;
+      _removeFromCart(productId);
+      return;
+    }
+
+    setState(() {
+      final item = _cartItems[productId];
+      if (item == null) return;
+
       final gstAmt = (item.unitPrice * newQty * item.gstRate) / 100.0;
       final total = (item.unitPrice * newQty) + gstAmt - (item.discountAmount * newQty);
 
@@ -150,8 +187,8 @@ class _PosBillingScreenState extends State<PosBillingScreen> {
         gstAmount: gstAmt,
         totalAmount: total > 0 ? total : 0,
       );
-    }
-    _updatePaidAmountToTotal();
+      _updatePaidAmountToTotal();
+    });
   }
 
   double get _subtotal => _cartItems.values.fold(0.0, (sum, i) => sum + (i.unitPrice * i.quantity));
@@ -726,7 +763,14 @@ class _PosBillingScreenState extends State<PosBillingScreen> {
     return Scaffold(
       backgroundColor: AppColors.backgroundCream,
       appBar: AppBar(
-        title: const Text('New POS Bill'),
+        title: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const ScanzoLogo.icon(size: 26),
+            const SizedBox(width: 8),
+            const Text('New POS Bill'),
+          ],
+        ),
         leading: IconButton(
           icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20),
           onPressed: () => Navigator.pop(context),
@@ -1052,6 +1096,11 @@ class _PosBillingScreenState extends State<PosBillingScreen> {
   }
 
   Widget _buildCartItemTile(SaleItem item) {
+    final prod = _productRepo.getProductById(item.productId) ??
+        _allProducts.where((p) => p.id == item.productId).firstOrNull;
+    final isAtMaxStock = prod != null && item.quantity >= prod.currentStock;
+    final isAtMinQty = item.quantity <= 1;
+
     return Row(
       children: [
         Expanded(
@@ -1071,20 +1120,33 @@ class _PosBillingScreenState extends State<PosBillingScreen> {
           mainAxisSize: MainAxisSize.min,
           children: [
             IconButton(
-              icon: const Icon(Icons.remove_circle_outline_rounded, size: 20, color: AppColors.textSecondary),
+              icon: Icon(
+                Icons.remove_circle_outline_rounded,
+                size: 20,
+                color: isAtMinQty ? AppColors.textMuted.withOpacity(0.4) : AppColors.textSecondary,
+              ),
               padding: EdgeInsets.zero,
               constraints: const BoxConstraints(minWidth: 26, minHeight: 26),
-              onPressed: () => _updateItemQty(item.productId, item.quantity - 1),
+              onPressed: isAtMinQty ? null : () => _decreaseItemQty(item.productId),
+              tooltip: isAtMinQty ? 'Minimum quantity is 1' : 'Decrease quantity',
             ),
-            Text(
-              item.quantity.toStringAsFixed(0),
-              style: AppTypography.bodyMedium.copyWith(fontWeight: FontWeight.bold),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 4),
+              child: Text(
+                item.quantity.toStringAsFixed(0),
+                style: AppTypography.bodyMedium.copyWith(fontWeight: FontWeight.bold),
+              ),
             ),
             IconButton(
-              icon: const Icon(Icons.add_circle_outline_rounded, size: 20, color: AppColors.primaryPinkDark),
+              icon: Icon(
+                Icons.add_circle_outline_rounded,
+                size: 20,
+                color: isAtMaxStock ? AppColors.textMuted.withOpacity(0.4) : AppColors.primaryPinkDark,
+              ),
               padding: EdgeInsets.zero,
               constraints: const BoxConstraints(minWidth: 26, minHeight: 26),
-              onPressed: () => _updateItemQty(item.productId, item.quantity + 1),
+              onPressed: () => _increaseItemQty(item.productId),
+              tooltip: isAtMaxStock ? 'Maximum stock reached' : 'Increase quantity',
             ),
           ],
         ),
@@ -1092,6 +1154,14 @@ class _PosBillingScreenState extends State<PosBillingScreen> {
         Text(
           CurrencyFormatter.format(item.totalAmount),
           style: AppTypography.bodySmall.copyWith(fontWeight: FontWeight.bold),
+        ),
+        const SizedBox(width: 4),
+        IconButton(
+          icon: const Icon(Icons.delete_outline_rounded, color: AppColors.error, size: 20),
+          padding: EdgeInsets.zero,
+          constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+          tooltip: 'Remove from cart',
+          onPressed: () => _removeFromCart(item.productId),
         ),
       ],
     );

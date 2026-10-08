@@ -8,6 +8,7 @@ import '../../../data/models/shop_type.dart';
 import '../../../data/repositories/business_repository.dart';
 import '../../../data/repositories/settings_repository.dart';
 import '../../../data/repositories/auth_repository.dart';
+import '../../../shared/widgets/scanzo_logo.dart';
 import '../../../app/routes.dart';
 
 class SettingsScreen extends StatefulWidget {
@@ -578,6 +579,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 onTap: () {
                   showAboutDialog(
                     context: context,
+                    applicationIcon: const ScanzoLogo.badge(size: 48),
                     applicationName: AppConstants.appName,
                     applicationVersion: AppConstants.appVersion,
                     applicationLegalese: 'SCANZO - Smart Billing & Business Management.\nOffline-first point of sale system.',
@@ -593,7 +595,31 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ),
             ],
           ),
-          const SizedBox(height: 32),
+          const SizedBox(height: 24),
+
+          // Official Branding Footer
+          Center(
+            child: Column(
+              children: [
+                const ScanzoLogo.badge(size: 52),
+                const SizedBox(height: 8),
+                Text(
+                  AppConstants.appName,
+                  style: AppTypography.h3.copyWith(fontSize: 16),
+                ),
+                Text(
+                  AppConstants.appTagline,
+                  style: AppTypography.caption.copyWith(color: AppColors.textSecondary),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Version ${AppConstants.appVersion} • All data stored locally on this device',
+                  style: AppTypography.caption.copyWith(color: AppColors.textMuted, fontSize: 11),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 24),
         ],
       ),
     );

@@ -6,6 +6,7 @@ import '../../../data/models/sale.dart';
 import '../../../data/models/business_profile.dart';
 import '../../../data/repositories/business_repository.dart';
 import '../../../data/services/invoice_pdf_service.dart';
+import '../../../shared/widgets/scanzo_logo.dart';
 
 class ReceiptPreviewScreen extends StatefulWidget {
   final Map<String, dynamic> arguments;
@@ -48,7 +49,19 @@ class _ReceiptPreviewScreenState extends State<ReceiptPreviewScreen> {
     return Scaffold(
       backgroundColor: AppColors.backgroundCream,
       appBar: AppBar(
-        title: Text('Receipt #${_sale.invoiceNumber}'),
+        title: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const ScanzoLogo.icon(size: 24),
+            const SizedBox(width: 8),
+            Flexible(
+              child: Text(
+                'Receipt #${_sale.invoiceNumber}',
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ],
+        ),
         leading: IconButton(
           icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20),
           onPressed: () => Navigator.pop(context),
