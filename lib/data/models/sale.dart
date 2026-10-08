@@ -2,6 +2,7 @@ import 'sale_item.dart';
 
 class Sale {
   final String id;
+  final String storeId;
   final String invoiceNumber;
   final String? customerId;
   final String? customerName;
@@ -21,6 +22,7 @@ class Sale {
 
   Sale({
     required this.id,
+    this.storeId = '',
     required this.invoiceNumber,
     this.customerId,
     this.customerName,
@@ -42,6 +44,7 @@ class Sale {
   Map<String, dynamic> toMap() {
     return {
       'id': id,
+      'storeId': storeId,
       'invoiceNumber': invoiceNumber,
       'customerId': customerId,
       'customerName': customerName,
@@ -63,6 +66,7 @@ class Sale {
   factory Sale.fromMap(Map<String, dynamic> map, [List<SaleItem> items = const []]) {
     return Sale(
       id: map['id'] ?? '',
+      storeId: map['storeId'] ?? '',
       invoiceNumber: map['invoiceNumber'] ?? '',
       customerId: map['customerId'],
       customerName: map['customerName'],
@@ -88,6 +92,7 @@ class Sale {
 
   Sale copyWith({
     String? id,
+    String? storeId,
     String? invoiceNumber,
     String? customerId,
     String? customerName,
@@ -106,6 +111,7 @@ class Sale {
   }) {
     return Sale(
       id: id ?? this.id,
+      storeId: storeId ?? this.storeId,
       invoiceNumber: invoiceNumber ?? this.invoiceNumber,
       customerId: customerId ?? this.customerId,
       customerName: customerName ?? this.customerName,

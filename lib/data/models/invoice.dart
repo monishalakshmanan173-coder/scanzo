@@ -1,5 +1,6 @@
 class Invoice {
   final String id;
+  final String storeId;
   final String invoiceNumber;
   final String saleId;
   final String? customerName;
@@ -19,6 +20,7 @@ class Invoice {
 
   Invoice({
     required this.id,
+    this.storeId = '',
     required this.invoiceNumber,
     required this.saleId,
     this.customerName,
@@ -40,6 +42,7 @@ class Invoice {
   Map<String, dynamic> toMap() {
     return {
       'id': id,
+      'storeId': storeId,
       'invoiceNumber': invoiceNumber,
       'saleId': saleId,
       'customerName': customerName,
@@ -62,6 +65,7 @@ class Invoice {
   factory Invoice.fromMap(Map<String, dynamic> map) {
     return Invoice(
       id: map['id'] ?? '',
+      storeId: map['storeId'] ?? '',
       invoiceNumber: map['invoiceNumber'] ?? '',
       saleId: map['saleId'] ?? '',
       customerName: map['customerName'],

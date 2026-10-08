@@ -1,5 +1,6 @@
 class StockMovement {
   final String id;
+  final String storeId;
   final String productId;
   final String productName;
   final String type; // PURCHASE, SALE, ADJUSTMENT, DAMAGED, RETURN
@@ -13,6 +14,7 @@ class StockMovement {
 
   StockMovement({
     required this.id,
+    this.storeId = '',
     required this.productId,
     required this.productName,
     required this.type,
@@ -28,6 +30,7 @@ class StockMovement {
   Map<String, dynamic> toMap() {
     return {
       'id': id,
+      'storeId': storeId,
       'productId': productId,
       'productName': productName,
       'type': type,
@@ -44,6 +47,7 @@ class StockMovement {
   factory StockMovement.fromMap(Map<String, dynamic> map) {
     return StockMovement(
       id: map['id'] ?? '',
+      storeId: map['storeId'] ?? '',
       productId: map['productId'] ?? '',
       productName: map['productName'] ?? '',
       type: map['type'] ?? 'ADJUSTMENT',

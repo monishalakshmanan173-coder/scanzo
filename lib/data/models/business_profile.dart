@@ -39,6 +39,8 @@ class BusinessProfile {
     required this.updatedAt,
   });
 
+  String get storeId => id;
+
   Map<String, dynamic> toMap() {
     return {
       'id': id,

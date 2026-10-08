@@ -1,5 +1,6 @@
 class ProductCategory {
   final String id;
+  final String storeId;
   final String name;
   final String? description;
   final String? iconName;
@@ -9,6 +10,7 @@ class ProductCategory {
 
   ProductCategory({
     required this.id,
+    this.storeId = '',
     required this.name,
     this.description,
     this.iconName,
@@ -20,6 +22,7 @@ class ProductCategory {
   Map<String, dynamic> toMap() {
     return {
       'id': id,
+      'storeId': storeId,
       'name': name,
       'description': description,
       'iconName': iconName,
@@ -32,6 +35,7 @@ class ProductCategory {
   factory ProductCategory.fromMap(Map<String, dynamic> map) {
     return ProductCategory(
       id: map['id'] ?? '',
+      storeId: map['storeId'] ?? '',
       name: map['name'] ?? '',
       description: map['description'],
       iconName: map['iconName'],

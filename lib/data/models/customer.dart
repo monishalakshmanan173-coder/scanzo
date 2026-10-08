@@ -1,5 +1,6 @@
 class Customer {
   final String id;
+  final String storeId;
   final String name;
   final String mobile;
   final String? email;
@@ -11,6 +12,7 @@ class Customer {
 
   Customer({
     required this.id,
+    this.storeId = '',
     required this.name,
     required this.mobile,
     this.email,
@@ -24,6 +26,7 @@ class Customer {
   Map<String, dynamic> toMap() {
     return {
       'id': id,
+      'storeId': storeId,
       'name': name,
       'mobile': mobile,
       'email': email,
@@ -38,6 +41,7 @@ class Customer {
   factory Customer.fromMap(Map<String, dynamic> map) {
     return Customer(
       id: map['id'] ?? '',
+      storeId: map['storeId'] ?? '',
       name: map['name'] ?? '',
       mobile: map['mobile'] ?? '',
       email: map['email'],
@@ -55,6 +59,7 @@ class Customer {
 
   Customer copyWith({
     String? id,
+    String? storeId,
     String? name,
     String? mobile,
     String? email,
@@ -65,6 +70,7 @@ class Customer {
   }) {
     return Customer(
       id: id ?? this.id,
+      storeId: storeId ?? this.storeId,
       name: name ?? this.name,
       mobile: mobile ?? this.mobile,
       email: email ?? this.email,
