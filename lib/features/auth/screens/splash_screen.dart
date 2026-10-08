@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_constants.dart';
 import '../../../core/constants/app_typography.dart';
-import '../../../data/services/session_service.dart';
+import '../../../data/repositories/auth_repository.dart';
 import '../../../app/routes.dart';
 import '../../../shared/widgets/scanzo_logo.dart';
 
@@ -43,16 +43,14 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
   }
 
   Future<void> _checkNavigation() async {
-    await Future.delayed(const Duration(milliseconds: 1500));
+    await Future.delayed(const Duration(milliseconds: 1400));
     if (!mounted) return;
 
-    final sessionService = SessionService();
-    await sessionService.init();
+    final authRepo = AuthRepository();
+    final isRestored = await authRepo.restoreSessionOnStartup();
 
-    if (sessionService.isLoggedIn) {
-      if (!sessionService.isOnboardingDone) {
-        Navigator.pushReplacementNamed(context, AppRoutes.onboarding);
-      } else if (!sessionService.isBusinessSetupDone) {
+    if (isRestored && authRepo.isLoggedIn) {
+      if (!authRepo.isBusinessSetupDone) {
         Navigator.pushReplacementNamed(context, AppRoutes.shopType);
       } else {
         // Returning User with active session -> DIRECT TO DASHBOARD!

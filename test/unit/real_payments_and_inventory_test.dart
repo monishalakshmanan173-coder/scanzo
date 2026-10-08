@@ -195,10 +195,10 @@ void main() {
     });
 
     test('User & Store Isolation: scoping user ID isolates store lists', () async {
-      db.setActiveUserId('user_alpha');
+      await db.setActiveUserId('user_alpha');
       final storeA = await businessRepo.createOrGetStoreForShopType('retail', storeName: 'Alpha Store');
 
-      db.setActiveUserId('user_beta');
+      await db.setActiveUserId('user_beta');
       final storeB = await businessRepo.createOrGetStoreForShopType('pharmacy', storeName: 'Beta Pharmacy');
 
       // Check stores for user_alpha

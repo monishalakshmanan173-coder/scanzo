@@ -46,12 +46,9 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
     setState(() => _isLoading = true);
     try {
       final mobile = _mobileController.text.trim();
-      String? sentVerificationId;
-      await _authRepo.sendOtp(
+      final sentVerificationId = await _authRepo.sendOtp(
         mobile,
-        onCodeSent: (verificationId) {
-          sentVerificationId = verificationId;
-        },
+        isNewAccount: true,
       );
       if (!mounted) return;
 
@@ -69,7 +66,8 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
         },
       );
     } catch (e) {
-      setState(() => _errorMessage = e.toString());
+      final msg = e.toString().replaceFirst(RegExp(r'^(Exception|AuthException|ValidationException):\s*'), '');
+      setState(() => _errorMessage = msg);
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -134,14 +132,51 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
 
                           if (_errorMessage != null) ...[
                             Container(
-                              padding: const EdgeInsets.all(12),
+                              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
                               decoration: BoxDecoration(
                                 color: AppColors.errorLight,
-                                borderRadius: BorderRadius.circular(12),
+                                borderRadius: BorderRadius.circular(14),
+                                border: Border.all(color: AppColors.error.withOpacity(0.3)),
                               ),
-                              child: Text(
-                                _errorMessage!,
-                                style: AppTypography.caption.copyWith(color: AppColors.error),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    children: [
+                                      const Icon(Icons.error_outline_rounded, size: 18, color: AppColors.error),
+                                      const SizedBox(width: 8),
+                                      Expanded(
+                                        child: Text(
+                                          _errorMessage!,
+                                          style: AppTypography.caption.copyWith(
+                                            color: AppColors.error,
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  if (_errorMessage!.contains('already exists') || _errorMessage!.contains('log in')) ...[
+                                    const SizedBox(height: 10),
+                                    SizedBox(
+                                      width: double.infinity,
+                                      height: 38,
+                                      child: ElevatedButton.icon(
+                                        onPressed: () {
+                                          Navigator.pushReplacementNamed(context, AppRoutes.login);
+                                        },
+                                        icon: const Icon(Icons.login_rounded, size: 16),
+                                        label: const Text('Log In to Existing Account',
+                                            style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                                        style: ElevatedButton.styleFrom(
+                                          backgroundColor: AppColors.primaryPinkDark,
+                                          foregroundColor: Colors.white,
+                                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ],
                               ),
                             ),
                             const SizedBox(height: 14),

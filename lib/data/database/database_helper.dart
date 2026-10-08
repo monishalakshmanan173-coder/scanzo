@@ -15,6 +15,7 @@ import '../models/app_settings.dart';
 import '../models/shop_type.dart';
 import '../../core/constants/app_constants.dart';
 import '../../core/utils/id_generator.dart';
+import '../services/cloud_sync_service.dart';
 
 class DatabaseHelper {
   static final DatabaseHelper _instance = DatabaseHelper._internal();
@@ -25,6 +26,7 @@ class DatabaseHelper {
 
   // Multi-store management
   final Map<String, BusinessProfile> _stores = {};
+  final Map<String, BusinessProfile> _allKnownStores = {};
   String _activeStoreId = '';
 
   // In-memory collections cached from persistent store
@@ -47,56 +49,7 @@ class DatabaseHelper {
     try {
       final prefs = await SharedPreferences.getInstance();
 
-      // 1. Load Stores
-      final storesStr = prefs.getString('db_stores');
-      if (storesStr != null && storesStr.isNotEmpty) {
-        final List list = jsonDecode(storesStr);
-        for (var item in list) {
-          final profile = BusinessProfile.fromMap(item);
-          _stores[profile.id] = profile;
-        }
-      }
-
-      // 2. Load Active Business Profile if existing
-      final businessJson = prefs.getString(AppConstants.keyActiveBusiness);
-      if (businessJson != null && businessJson.isNotEmpty) {
-        final profile = BusinessProfile.fromMap(jsonDecode(businessJson));
-        _stores[profile.id] = profile;
-        _businessProfile = profile;
-      }
-
-      // 3. Resolve activeStoreId
-      _activeStoreId = prefs.getString('active_store_id') ?? '';
-      if (_activeStoreId.isEmpty || !_stores.containsKey(_activeStoreId)) {
-        if (_businessProfile != null) {
-          _activeStoreId = _businessProfile!.id;
-        } else if (_stores.isNotEmpty) {
-          _activeStoreId = _stores.keys.first;
-          _businessProfile = _stores[_activeStoreId];
-        } else {
-          // Initialize default store if none exists
-          _activeStoreId = 'store_retail';
-          final defaultStore = BusinessProfile(
-            id: 'store_retail',
-            businessName: 'SCANZO Retail Store',
-            ownerName: 'Store Owner',
-            mobile: '9876543210',
-            address: 'Main Market Road',
-            city: 'Metro City',
-            state: 'State',
-            pincode: '560001',
-            shopTypeId: 'retail',
-            createdAt: DateTime.now(),
-            updatedAt: DateTime.now(),
-          );
-          _stores[_activeStoreId] = defaultStore;
-          _businessProfile = defaultStore;
-        }
-      } else {
-        _businessProfile = _stores[_activeStoreId];
-      }
-
-      // 4. Load Settings
+      // Load Settings
       final settingsJson = prefs.getString(AppConstants.keyAppSettings);
       if (settingsJson != null && settingsJson.isNotEmpty) {
         _appSettings = AppSettings.fromMap(jsonDecode(settingsJson));
@@ -108,13 +61,31 @@ class DatabaseHelper {
         );
       }
 
-      // 5. Load collections from persistent storage
-      await _loadCollections(prefs);
-
-      // Ensure active store has categories
-      if (_categories.values.where((c) => c.storeId == _activeStoreId).isEmpty) {
-        _seedCategoriesForStore(_activeStoreId, activeStoreType);
-        await _persistCategories();
+      if (_activeUserId.isNotEmpty) {
+        await setActiveUserId(_activeUserId);
+      } else {
+        // Load legacy stores if any
+        final storesStr = prefs.getString('db_stores');
+        if (storesStr != null && storesStr.isNotEmpty) {
+          final List list = jsonDecode(storesStr);
+          for (var item in list) {
+            final profile = BusinessProfile.fromMap(item);
+            _allKnownStores[profile.id] = profile;
+            _stores[profile.id] = profile;
+          }
+        }
+        final businessJson = prefs.getString(AppConstants.keyActiveBusiness);
+        if (businessJson != null && businessJson.isNotEmpty) {
+          final profile = BusinessProfile.fromMap(jsonDecode(businessJson));
+          _allKnownStores[profile.id] = profile;
+          _stores[profile.id] = profile;
+          _businessProfile = profile;
+        }
+        _activeStoreId = prefs.getString('active_store_id') ?? (_businessProfile?.id ?? (_stores.isNotEmpty ? _stores.keys.first : ''));
+        if (_activeStoreId.isNotEmpty && _stores.containsKey(_activeStoreId)) {
+          _businessProfile = _stores[_activeStoreId];
+        }
+        await _loadCollections(prefs);
       }
 
       _initialized = true;
@@ -304,34 +275,54 @@ class DatabaseHelper {
   }
 
   // --- PERSISTENCE HELPERS ---
+  String _userKey(String base) => _activeUserId.isNotEmpty ? '${base}_$_activeUserId' : base;
+
+  // --- PERSISTENCE HELPERS ---
   Future<void> _persistStores() async {
     final prefs = await SharedPreferences.getInstance();
     final list = _stores.values.map((s) => s.toMap()).toList();
-    await prefs.setString('db_stores', jsonEncode(list));
+    await prefs.setString(_userKey('db_stores'), jsonEncode(list));
+    final allList = _allKnownStores.values.map((s) => s.toMap()).toList();
+    await prefs.setString('db_stores', jsonEncode(allList));
+    if (_activeUserId.isNotEmpty) {
+      await syncToCloud();
+    }
   }
 
   Future<void> _persistProducts() async {
     final prefs = await SharedPreferences.getInstance();
     final list = _products.values.map((p) => p.toMap()).toList();
-    await prefs.setString('db_products', jsonEncode(list));
+    await prefs.setString(_userKey('db_products'), jsonEncode(list));
+    if (_activeUserId.isNotEmpty) {
+      await syncToCloud();
+    }
   }
 
   Future<void> _persistCategories() async {
     final prefs = await SharedPreferences.getInstance();
     final list = _categories.values.map((c) => c.toMap()).toList();
-    await prefs.setString('db_categories', jsonEncode(list));
+    await prefs.setString(_userKey('db_categories'), jsonEncode(list));
+    if (_activeUserId.isNotEmpty) {
+      await syncToCloud();
+    }
   }
 
   Future<void> _persistCustomers() async {
     final prefs = await SharedPreferences.getInstance();
     final list = _customers.values.map((c) => c.toMap()).toList();
-    await prefs.setString('db_customers', jsonEncode(list));
+    await prefs.setString(_userKey('db_customers'), jsonEncode(list));
+    if (_activeUserId.isNotEmpty) {
+      await syncToCloud();
+    }
   }
 
   Future<void> _persistSuppliers() async {
     final prefs = await SharedPreferences.getInstance();
     final list = _suppliers.values.map((s) => s.toMap()).toList();
-    await prefs.setString('db_suppliers', jsonEncode(list));
+    await prefs.setString(_userKey('db_suppliers'), jsonEncode(list));
+    if (_activeUserId.isNotEmpty) {
+      await syncToCloud();
+    }
   }
 
   Future<void> _persistSalesAndStock() async {
@@ -342,19 +333,305 @@ class DatabaseHelper {
     final smList = _stockMovements.map((sm) => sm.toMap()).toList();
     final invList = _invoices.values.map((inv) => inv.toMap()).toList();
 
-    await prefs.setString('db_sales', jsonEncode(sList));
-    await prefs.setString('db_sale_items', jsonEncode(siList));
-    await prefs.setString('db_payments', jsonEncode(pList));
-    await prefs.setString('db_stock_movements', jsonEncode(smList));
-    await prefs.setString('db_invoices', jsonEncode(invList));
-    await prefs.setInt('db_invoice_sequence', _invoiceSequence);
+    await prefs.setString(_userKey('db_sales'), jsonEncode(sList));
+    await prefs.setString(_userKey('db_sale_items'), jsonEncode(siList));
+    await prefs.setString(_userKey('db_payments'), jsonEncode(pList));
+    await prefs.setString(_userKey('db_stock_movements'), jsonEncode(smList));
+    await prefs.setString(_userKey('db_invoices'), jsonEncode(invList));
+    await prefs.setInt(_userKey('db_invoice_sequence'), _invoiceSequence);
     await _persistProducts();
   }
 
   String _activeUserId = '';
   String get activeUserId => _activeUserId;
-  void setActiveUserId(String uid) {
+
+  Future<void> setActiveUserId(String uid) async {
     _activeUserId = uid;
+    final prefs = await SharedPreferences.getInstance();
+
+    if (uid.isEmpty) {
+      _stores.clear();
+      _products.clear();
+      _categories.clear();
+      _customers.clear();
+      _suppliers.clear();
+      _sales.clear();
+      _saleItems.clear();
+      _payments.clear();
+      _stockMovements.clear();
+      _invoices.clear();
+      _businessProfile = null;
+      _activeStoreId = '';
+      return;
+    }
+
+    _stores.clear();
+    _products.clear();
+    _categories.clear();
+    _customers.clear();
+    _suppliers.clear();
+    _sales.clear();
+    _saleItems.clear();
+    _payments.clear();
+    _stockMovements.clear();
+    _invoices.clear();
+    _businessProfile = null;
+    _activeStoreId = '';
+
+    await _loadUserPartition(prefs, uid);
+
+    if (_stores.isEmpty) {
+      final cloudBackup = await CloudSyncService().restoreUserData(uid);
+      if (cloudBackup != null) {
+        await _applyUserDataSnapshot(cloudBackup, uid, prefs);
+      }
+    }
+
+    if (_stores.isNotEmpty) {
+      final savedStoreId = prefs.getString(_userKey('active_store_id')) ?? '';
+      if (savedStoreId.isNotEmpty && _stores.containsKey(savedStoreId)) {
+        _activeStoreId = savedStoreId;
+        _businessProfile = _stores[savedStoreId];
+      } else {
+        _activeStoreId = _stores.keys.first;
+        _businessProfile = _stores[_activeStoreId];
+      }
+    }
+  }
+
+  Future<void> syncToCloud() async {
+    if (_activeUserId.isEmpty) return;
+
+    final snapshot = {
+      'uid': _activeUserId,
+      'activeStoreId': _activeStoreId,
+      'stores': _stores.values.map((s) => s.toMap()).toList(),
+      'products': _products.values.map((p) => p.toMap()).toList(),
+      'categories': _categories.values.map((c) => c.toMap()).toList(),
+      'customers': _customers.values.map((c) => c.toMap()).toList(),
+      'suppliers': _suppliers.values.map((s) => s.toMap()).toList(),
+      'sales': _sales.values.map((s) => s.toMap()).toList(),
+      'saleItems': _saleItems.map((si) => si.toMap()).toList(),
+      'payments': _payments.map((p) => p.toMap()).toList(),
+      'stockMovements': _stockMovements.map((sm) => sm.toMap()).toList(),
+      'invoices': _invoices.values.map((inv) => inv.toMap()).toList(),
+      'settings': _appSettings?.toMap(),
+      'updatedAt': DateTime.now().toIso8601String(),
+    };
+
+    await CloudSyncService().backupUserData(_activeUserId, snapshot);
+  }
+
+  Future<void> _loadUserPartition(SharedPreferences prefs, String uid) async {
+    final storesStr = prefs.getString(_userKey('db_stores')) ?? prefs.getString('db_stores');
+    if (storesStr != null && storesStr.isNotEmpty) {
+      try {
+        final List list = jsonDecode(storesStr);
+        for (var item in list) {
+          final profile = BusinessProfile.fromMap(item);
+          _allKnownStores[profile.id] = profile;
+          if (profile.userId.isEmpty || profile.userId == uid) {
+            _stores[profile.id] = profile.copyWith(userId: uid);
+          }
+        }
+      } catch (_) {}
+    }
+
+    final productsStr = prefs.getString(_userKey('db_products')) ?? (_stores.isNotEmpty ? prefs.getString('db_products') : null);
+    if (productsStr != null) {
+      try {
+        final List list = jsonDecode(productsStr);
+        for (var item in list) {
+          final p = Product.fromMap(item);
+          _products[p.id] = p;
+        }
+      } catch (_) {}
+    }
+
+    final categoriesStr = prefs.getString(_userKey('db_categories')) ?? (_stores.isNotEmpty ? prefs.getString('db_categories') : null);
+    if (categoriesStr != null) {
+      try {
+        final List list = jsonDecode(categoriesStr);
+        for (var item in list) {
+          final c = ProductCategory.fromMap(item);
+          _categories[c.id] = c;
+        }
+      } catch (_) {}
+    }
+
+    final customersStr = prefs.getString(_userKey('db_customers')) ?? (_stores.isNotEmpty ? prefs.getString('db_customers') : null);
+    if (customersStr != null) {
+      try {
+        final List list = jsonDecode(customersStr);
+        for (var item in list) {
+          final c = Customer.fromMap(item);
+          _customers[c.id] = c;
+        }
+      } catch (_) {}
+    }
+
+    final suppliersStr = prefs.getString(_userKey('db_suppliers')) ?? (_stores.isNotEmpty ? prefs.getString('db_suppliers') : null);
+    if (suppliersStr != null) {
+      try {
+        final List list = jsonDecode(suppliersStr);
+        for (var item in list) {
+          final s = Supplier.fromMap(item);
+          _suppliers[s.id] = s;
+        }
+      } catch (_) {}
+    }
+
+    final salesStr = prefs.getString(_userKey('db_sales')) ?? (_stores.isNotEmpty ? prefs.getString('db_sales') : null);
+    final saleItemsStr = prefs.getString(_userKey('db_sale_items')) ?? (_stores.isNotEmpty ? prefs.getString('db_sale_items') : null);
+    if (saleItemsStr != null) {
+      try {
+        final List list = jsonDecode(saleItemsStr);
+        _saleItems.clear();
+        for (var item in list) {
+          _saleItems.add(SaleItem.fromMap(item));
+        }
+      } catch (_) {}
+    }
+
+    if (salesStr != null) {
+      try {
+        final List list = jsonDecode(salesStr);
+        for (var item in list) {
+          final sId = item['id'];
+          final items = _saleItems.where((si) => si.saleId == sId).toList();
+          final s = Sale.fromMap(item, items);
+          _sales[s.id] = s;
+        }
+      } catch (_) {}
+    }
+
+    final paymentsStr = prefs.getString(_userKey('db_payments')) ?? (_stores.isNotEmpty ? prefs.getString('db_payments') : null);
+    if (paymentsStr != null) {
+      try {
+        final List list = jsonDecode(paymentsStr);
+        _payments.clear();
+        for (var item in list) {
+          _payments.add(Payment.fromMap(item));
+        }
+      } catch (_) {}
+    }
+
+    final movementsStr = prefs.getString(_userKey('db_stock_movements')) ?? (_stores.isNotEmpty ? prefs.getString('db_stock_movements') : null);
+    if (movementsStr != null) {
+      try {
+        final List list = jsonDecode(movementsStr);
+        _stockMovements.clear();
+        for (var item in list) {
+          _stockMovements.add(StockMovement.fromMap(item));
+        }
+      } catch (_) {}
+    }
+
+    final invoicesStr = prefs.getString(_userKey('db_invoices')) ?? (_stores.isNotEmpty ? prefs.getString('db_invoices') : null);
+    if (invoicesStr != null) {
+      try {
+        final List list = jsonDecode(invoicesStr);
+        for (var item in list) {
+          final inv = Invoice.fromMap(item);
+          _invoices[inv.id] = inv;
+        }
+      } catch (_) {}
+    }
+  }
+
+  Future<void> _applyUserDataSnapshot(Map<String, dynamic> snapshot, String uid, SharedPreferences prefs) async {
+    if (snapshot.containsKey('stores')) {
+      final List list = snapshot['stores'] as List? ?? [];
+      for (var item in list) {
+        final profile = BusinessProfile.fromMap(item as Map<String, dynamic>);
+        _stores[profile.id] = profile.copyWith(userId: uid);
+      }
+    }
+
+    if (snapshot.containsKey('products')) {
+      final List list = snapshot['products'] as List? ?? [];
+      for (var item in list) {
+        final p = Product.fromMap(item as Map<String, dynamic>);
+        _products[p.id] = p;
+      }
+    }
+
+    if (snapshot.containsKey('categories')) {
+      final List list = snapshot['categories'] as List? ?? [];
+      for (var item in list) {
+        final c = ProductCategory.fromMap(item as Map<String, dynamic>);
+        _categories[c.id] = c;
+      }
+    }
+
+    if (snapshot.containsKey('customers')) {
+      final List list = snapshot['customers'] as List? ?? [];
+      for (var item in list) {
+        final c = Customer.fromMap(item as Map<String, dynamic>);
+        _customers[c.id] = c;
+      }
+    }
+
+    if (snapshot.containsKey('suppliers')) {
+      final List list = snapshot['suppliers'] as List? ?? [];
+      for (var item in list) {
+        final s = Supplier.fromMap(item as Map<String, dynamic>);
+        _suppliers[s.id] = s;
+      }
+    }
+
+    if (snapshot.containsKey('saleItems')) {
+      final List list = snapshot['saleItems'] as List? ?? [];
+      _saleItems.clear();
+      for (var item in list) {
+        _saleItems.add(SaleItem.fromMap(item as Map<String, dynamic>));
+      }
+    }
+
+    if (snapshot.containsKey('sales')) {
+      final List list = snapshot['sales'] as List? ?? [];
+      for (var item in list) {
+        final sId = item['id'];
+        final items = _saleItems.where((si) => si.saleId == sId).toList();
+        final s = Sale.fromMap(item as Map<String, dynamic>, items);
+        _sales[s.id] = s;
+      }
+    }
+
+    if (snapshot.containsKey('payments')) {
+      final List list = snapshot['payments'] as List? ?? [];
+      _payments.clear();
+      for (var item in list) {
+        _payments.add(Payment.fromMap(item as Map<String, dynamic>));
+      }
+    }
+
+    if (snapshot.containsKey('stockMovements')) {
+      final List list = snapshot['stockMovements'] as List? ?? [];
+      _stockMovements.clear();
+      for (var item in list) {
+        _stockMovements.add(StockMovement.fromMap(item as Map<String, dynamic>));
+      }
+    }
+
+    if (snapshot.containsKey('invoices')) {
+      final List list = snapshot['invoices'] as List? ?? [];
+      for (var item in list) {
+        final inv = Invoice.fromMap(item as Map<String, dynamic>);
+        _invoices[inv.id] = inv;
+      }
+    }
+
+    if (snapshot.containsKey('settings') && snapshot['settings'] != null) {
+      _appSettings = AppSettings.fromMap(snapshot['settings'] as Map<String, dynamic>);
+    }
+
+    await _persistStores();
+    await _persistProducts();
+    await _persistCategories();
+    await _persistCustomers();
+    await _persistSuppliers();
+    await _persistSalesAndStock();
   }
 
   // --- STORE CONTEXT & PROFILE MANAGEMENT ---
@@ -365,14 +642,22 @@ class DatabaseHelper {
 
   List<BusinessProfile> getAllStores({String? userId}) {
     final uid = userId ?? _activeUserId;
-    var list = _stores.values.toList();
+    var list = (uid.isNotEmpty && uid != _activeUserId)
+        ? _allKnownStores.values.toList()
+        : _stores.values.toList();
     if (uid.isNotEmpty) {
       list = list.where((s) => s.userId == uid).toList();
     }
     return list..sort((a, b) => b.createdAt.compareTo(a.createdAt));
   }
 
-  BusinessProfile? getStoreById(String storeId) => _stores[storeId];
+  BusinessProfile? getStoreById(String storeId) {
+    final s = _stores[storeId] ?? _allKnownStores[storeId];
+    if (s != null && _activeUserId.isNotEmpty && s.userId.isNotEmpty && s.userId != _activeUserId) {
+      return null;
+    }
+    return s;
+  }
 
   Future<void> setActiveStore(String storeId) async {
     if (_stores.containsKey(storeId)) {
@@ -397,6 +682,7 @@ class DatabaseHelper {
         : profile;
 
     _stores[toSave.id] = toSave;
+    _allKnownStores[toSave.id] = toSave;
     if (makeActive || _activeStoreId.isEmpty) {
       _activeStoreId = toSave.id;
       _businessProfile = toSave;

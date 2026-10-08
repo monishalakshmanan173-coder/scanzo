@@ -39,12 +39,9 @@ class _LoginScreenState extends State<LoginScreen> {
     setState(() => _isLoading = true);
     try {
       final mobile = _mobileController.text.trim();
-      String? sentVerificationId;
-      await _authRepo.sendOtp(
+      final sentVerificationId = await _authRepo.sendOtp(
         mobile,
-        onCodeSent: (verificationId) {
-          sentVerificationId = verificationId;
-        },
+        isNewAccount: false,
       );
       if (!mounted) return;
 
@@ -58,7 +55,8 @@ class _LoginScreenState extends State<LoginScreen> {
         },
       );
     } catch (e) {
-      setState(() => _errorMessage = e.toString());
+      final msg = e.toString().replaceFirst(RegExp(r'^(Exception|AuthException|ValidationException):\s*'), '');
+      setState(() => _errorMessage = msg);
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -137,25 +135,52 @@ class _LoginScreenState extends State<LoginScreen> {
                             if (_errorMessage != null) ...[
                               Container(
                                 padding: const EdgeInsets.symmetric(
-                                    horizontal: 14, vertical: 10),
+                                    horizontal: 14, vertical: 12),
                                 decoration: BoxDecoration(
                                   color: AppColors.errorLight,
-                                  borderRadius: BorderRadius.circular(12),
+                                  borderRadius: BorderRadius.circular(14),
+                                  border: Border.all(color: AppColors.error.withOpacity(0.3)),
                                 ),
-                                child: Row(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    const Icon(Icons.error_outline_rounded,
-                                        size: 18, color: AppColors.error),
-                                    const SizedBox(width: 8),
-                                    Expanded(
-                                      child: Text(
-                                        _errorMessage!,
-                                        style: AppTypography.caption.copyWith(
-                                          color: AppColors.error,
-                                          fontWeight: FontWeight.w600,
+                                    Row(
+                                      children: [
+                                        const Icon(Icons.error_outline_rounded,
+                                            size: 18, color: AppColors.error),
+                                        const SizedBox(width: 8),
+                                        Expanded(
+                                          child: Text(
+                                            _errorMessage!,
+                                            style: AppTypography.caption.copyWith(
+                                              color: AppColors.error,
+                                              fontWeight: FontWeight.w600,
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                    if (_errorMessage!.contains('Account not found') ||
+                                        _errorMessage!.contains('create an account first')) ...[
+                                      const SizedBox(height: 10),
+                                      SizedBox(
+                                        width: double.infinity,
+                                        height: 38,
+                                        child: ElevatedButton.icon(
+                                          onPressed: () {
+                                            Navigator.pushNamed(context, AppRoutes.createAccount);
+                                          },
+                                          icon: const Icon(Icons.person_add_rounded, size: 16),
+                                          label: const Text('Create Account Now',
+                                              style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                                          style: ElevatedButton.styleFrom(
+                                            backgroundColor: AppColors.primaryPinkDark,
+                                            foregroundColor: Colors.white,
+                                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                          ),
                                         ),
                                       ),
-                                    ),
+                                    ],
                                   ],
                                 ),
                               ),

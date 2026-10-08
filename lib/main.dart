@@ -19,9 +19,11 @@ void main() async {
 
   // Initialize Firebase for real Phone Authentication
   try {
-    await Firebase.initializeApp(
-      options: DefaultFirebaseOptions.currentPlatform,
-    );
+    if (Firebase.apps.isEmpty) {
+      await Firebase.initializeApp(
+        options: DefaultFirebaseOptions.currentPlatform,
+      );
+    }
   } catch (e) {
     debugPrint('Firebase initialization notice: $e');
   }
@@ -34,7 +36,7 @@ void main() async {
 
   // Scope active database user identity to the authenticated Firebase session
   if (session.currentUser != null && session.currentUser!.id.isNotEmpty) {
-    db.setActiveUserId(session.currentUser!.id);
+    await db.setActiveUserId(session.currentUser!.id);
   }
 
   runApp(const ScanzoApp());

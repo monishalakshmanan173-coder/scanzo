@@ -1,15 +1,19 @@
+import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../../core/constants/app_constants.dart';
 import '../../core/errors/app_exceptions.dart';
 import '../../core/utils/id_generator.dart';
 import '../models/user_session.dart';
+import '../models/business_profile.dart';
 import '../services/session_service.dart';
+import '../services/cloud_sync_service.dart';
 import '../database/database_helper.dart';
 
 class AuthRepository {
   final FirebaseAuth? _firebaseAuth;
   final SessionService _sessionService;
+  final CloudSyncService _cloudSync;
 
   // In-flight phone verification tokens
   String? _lastVerificationId;
@@ -19,8 +23,10 @@ class AuthRepository {
   AuthRepository({
     FirebaseAuth? firebaseAuth,
     SessionService? sessionService,
+    CloudSyncService? cloudSync,
   })  : _firebaseAuth = firebaseAuth,
-        _sessionService = sessionService ?? SessionService();
+        _sessionService = sessionService ?? SessionService(),
+        _cloudSync = cloudSync ?? CloudSyncService();
 
   FirebaseAuth? get _auth {
     if (_firebaseAuth != null) return _firebaseAuth;
@@ -37,15 +43,33 @@ class AuthRepository {
   bool get isBusinessSetupDone => _sessionService.isBusinessSetupDone;
   String? get currentVerificationId => _lastVerificationId;
 
+  /// Checks if an account exists for this mobile number in the cloud registry.
+  Future<bool> checkAccountExists(String mobile) async {
+    return _cloudSync.isAccountRegistered(mobile);
+  }
+
   /// Sends a real SMS OTP to the provided 10-digit mobile number using Firebase Authentication.
-  Future<void> sendOtp(
+  /// For Login (isNewAccount = false), ensures the account exists before sending OTP.
+  /// For Create Account (isNewAccount = true), ensures no duplicate account exists.
+  Future<String> sendOtp(
     String mobile, {
+    bool isNewAccount = false,
     void Function(String verificationId)? onCodeSent,
     void Function(String error)? onError,
   }) async {
     final cleaned = mobile.replaceAll(RegExp(r'\D'), '');
     if (cleaned.length != 10) {
-      throw ValidationException('Please enter a valid 10-digit mobile number');
+      throw ValidationException('Please enter a valid 10-digit mobile number.');
+    }
+
+    // 1. Account Existence Validation
+    final accountExists = await checkAccountExists(cleaned);
+    if (!isNewAccount && !accountExists) {
+      // Login attempt for non-existent account
+      throw AuthException('Account not found. Please create an account first.');
+    } else if (isNewAccount && accountExists) {
+      // Create Account attempt for already existing account
+      throw AuthException('An account already exists for this number. Please log in instead.');
     }
 
     final formattedNumber = '+91$cleaned';
@@ -61,53 +85,82 @@ class AuthRepository {
           _webConfirmationResult = confirmationResult;
           _lastVerificationId = confirmationResult.verificationId;
           onCodeSent?.call(confirmationResult.verificationId);
+          return confirmationResult.verificationId;
         } else {
-          // Android & iOS Native Phone Authentication
+          // Android & iOS Native Phone Authentication using Completer to await codeSent
+          final completer = Completer<String>();
+
           await authInstance.verifyPhoneNumber(
             phoneNumber: formattedNumber,
             timeout: const Duration(seconds: 60),
             verificationCompleted: (PhoneAuthCredential credential) async {
-              // Auto-retrieval handled seamlessly on supported devices
+              // Auto-retrieval handled seamlessly on supported Android devices
             },
             verificationFailed: (FirebaseAuthException e) {
               final message = _mapFirebaseError(e);
               onError?.call(message);
+              if (!completer.isCompleted) {
+                completer.completeError(AuthException(message));
+              }
             },
             codeSent: (String verificationId, int? resendToken) {
               _lastVerificationId = verificationId;
               _resendToken = resendToken;
               onCodeSent?.call(verificationId);
+              if (!completer.isCompleted) {
+                completer.complete(verificationId);
+              }
             },
             codeAutoRetrievalTimeout: (String verificationId) {
               _lastVerificationId = verificationId;
+              if (!completer.isCompleted) {
+                completer.complete(verificationId);
+              }
             },
             forceResendingToken: _resendToken,
           );
+
+          return await completer.future.timeout(
+            const Duration(seconds: 45),
+            onTimeout: () {
+              if (_lastVerificationId != null && _lastVerificationId!.isNotEmpty) {
+                return _lastVerificationId!;
+              }
+              throw AuthException('SMS sending timed out. Please check your network and try again.');
+            },
+          );
         }
       } on FirebaseAuthException catch (e) {
-        throw AuthException(_mapFirebaseError(e));
+        final message = _mapFirebaseError(e);
+        throw AuthException(message);
       } catch (e) {
-        throw AuthException('Could not send OTP. ${e.toString()}');
+        if (e is AuthException) rethrow;
+        throw AuthException('Unable to send OTP. Please check your number and internet connection.');
       }
     } else {
-      // Offline/Test environment fallback
+      // Offline / Test environment fallback
       _lastVerificationId = 'test_ver_${IdGenerator.generateId()}';
       onCodeSent?.call(_lastVerificationId!);
+      return _lastVerificationId!;
     }
   }
 
   /// Verifies the entered 6-digit OTP using Firebase Authentication and establishes the user session.
+  /// - Enforces that Login fails if no store profile exists for this UID.
+  /// - Enforces that Create Account registers the profile permanently with Firebase UID.
   Future<UserSession> verifyOtpAndLogin({
     required String mobile,
     required String otp,
+    bool isNewAccount = false,
     String? verificationId,
     String? ownerName,
     String? businessName,
     String? email,
+    String? businessType,
   }) async {
     final cleanOtp = otp.trim();
     if (cleanOtp.length != 6) {
-      throw ValidationException('Please enter the complete 6-digit OTP');
+      throw ValidationException('Please enter the complete 6-digit OTP.');
     }
 
     final authInstance = _auth;
@@ -147,30 +200,127 @@ class AuthRepository {
         throw AuthException(_mapFirebaseError(e));
       } catch (e) {
         if (e is AuthException) rethrow;
-        throw AuthException('Failed to verify OTP: ${e.toString()}');
+        throw AuthException('Invalid OTP. Please try again.');
       }
     } else {
       // Headless unit test fallback
       if (cleanOtp != AppConstants.devTestOtp && cleanOtp != '999999' && cleanOtp != '123456') {
-        throw AuthException('Invalid OTP. Please check the code and try again.');
+        throw AuthException('Invalid OTP. Please try again.');
       }
       uid = 'usr_${IdGenerator.generateId()}';
     }
 
     final cleanedMobile = mobile.replaceAll(RegExp(r'\D'), '');
+
+    // 2. Enforce Flow Integrity Based on UID
+    if (!isNewAccount) {
+      // LOGIN FLOW: Account must already exist
+      final hasProfile = await _cloudSync.hasAccountProfile(uid) || await checkAccountExists(cleanedMobile);
+      if (!hasProfile) {
+        // Sign out Firebase user session since account setup was never performed
+        try {
+          await authInstance?.signOut();
+        } catch (_) {}
+        throw AuthException('Account not found. Please create an account first.');
+      }
+    } else {
+      // CREATE ACCOUNT FLOW: Account must not already exist
+      final hasProfile = await _cloudSync.hasAccountProfile(uid);
+      if (hasProfile) {
+        throw AuthException('An account already exists for this number. Please log in instead.');
+      }
+    }
+
+    // 3. Establish Session & Cloud Identity
+    final resolvedOwner = (ownerName != null && ownerName.isNotEmpty) ? ownerName : 'Store Owner';
+    final resolvedBusiness = (businessName != null && businessName.isNotEmpty) ? businessName : 'SCANZO Store';
+
     final session = UserSession(
       id: uid.isNotEmpty ? uid : IdGenerator.generateId('usr'),
-      ownerName: (ownerName != null && ownerName.isNotEmpty) ? ownerName : 'Shop Owner',
-      businessName: (businessName != null && businessName.isNotEmpty) ? businessName : 'SCANZO Store',
+      ownerName: resolvedOwner,
+      businessName: resolvedBusiness,
       mobile: phoneNumber ?? cleanedMobile,
       email: email,
       createdAt: DateTime.now(),
       updatedAt: DateTime.now(),
     );
 
+    // Persist session
     await _sessionService.saveSession(session);
-    DatabaseHelper().setActiveUserId(session.id);
+
+    // Register in persistent cloud registry
+    if (isNewAccount) {
+      await _cloudSync.registerAccount(
+        uid: session.id,
+        mobile: cleanedMobile,
+        ownerName: resolvedOwner,
+        businessName: resolvedBusiness,
+        email: email,
+      );
+    }
+
+    // Isolate active database to this Firebase UID and restore existing stores/products
+    await DatabaseHelper().setActiveUserId(session.id);
+
+    // If new account, ensure initial business profile is created with this UID
+    if (isNewAccount && DatabaseHelper().businessProfile == null) {
+      final initialStore = BusinessProfile(
+        id: 'store_${DateTime.now().millisecondsSinceEpoch % 10000}',
+        userId: session.id,
+        businessName: resolvedBusiness,
+        ownerName: resolvedOwner,
+        mobile: cleanedMobile,
+        email: email,
+        address: 'Main Store',
+        city: 'City',
+        state: 'State',
+        pincode: '000000',
+        shopTypeId: (businessType ?? 'retail').toLowerCase().replaceAll(' ', '_'),
+        createdAt: DateTime.now(),
+        updatedAt: DateTime.now(),
+      );
+      await DatabaseHelper().saveBusinessProfile(initialStore);
+    }
+
     return session;
+  }
+
+  /// Restores session on app startup by checking Firebase currentUser.
+  /// If authenticated, restores the user session and store data.
+  /// If not authenticated, clears local session and prompts login.
+  Future<bool> restoreSessionOnStartup() async {
+    final authInstance = _auth;
+    final firebaseUser = authInstance?.currentUser;
+
+    if (firebaseUser != null) {
+      final uid = firebaseUser.uid;
+      final hasProfile = await _cloudSync.hasAccountProfile(uid);
+
+      if (hasProfile) {
+        // Restore existing user profile
+        final profile = await _cloudSync.getAccountProfile(uid);
+        final session = UserSession(
+          id: uid,
+          ownerName: profile?['ownerName'] ?? 'Store Owner',
+          businessName: profile?['businessName'] ?? 'SCANZO Store',
+          mobile: firebaseUser.phoneNumber ?? profile?['mobile'] ?? '',
+          email: profile?['email'],
+          createdAt: DateTime.now(),
+          updatedAt: DateTime.now(),
+        );
+
+        await _sessionService.saveSession(session);
+        await DatabaseHelper().setActiveUserId(uid);
+        return true;
+      }
+    }
+
+    // If not authenticated or profile not found, ensure logged out state
+    if (authInstance != null && firebaseUser == null) {
+      await _sessionService.logout();
+      await DatabaseHelper().setActiveUserId('');
+    }
+    return false;
   }
 
   Future<void> completeOnboarding() async {
@@ -186,15 +336,15 @@ class AuthRepository {
       await _auth?.signOut();
     } catch (_) {}
     await _sessionService.logout();
-    DatabaseHelper().setActiveUserId('');
+    await DatabaseHelper().setActiveUserId('');
   }
 
   String _mapFirebaseError(FirebaseAuthException e) {
     switch (e.code) {
       case 'invalid-verification-code':
-        return 'Invalid OTP code. Please check the SMS and try again.';
+        return 'Invalid OTP. Please try again.';
       case 'invalid-phone-number':
-        return 'The mobile number entered is invalid. Please verify the 10 digits.';
+        return 'Enter a valid mobile number.';
       case 'session-expired':
         return 'The OTP has expired. Please tap "Resend Code" for a new OTP.';
       case 'too-many-requests':
@@ -202,13 +352,24 @@ class AuthRepository {
       case 'quota-exceeded':
         return 'SMS quota exceeded for today. Please try again later or contact support.';
       case 'network-request-failed':
-        return 'Network connection error. Please check your internet connection.';
+        return 'Unable to send OTP. Please check your number and internet connection.';
       case 'captcha-check-failed':
         return 'reCAPTCHA verification failed. Please try again.';
       case 'operation-not-allowed':
-        return 'Phone authentication is not enabled in Firebase Console. Please enable Phone provider.';
+        return 'Phone authentication is not enabled in Firebase Console. Please enable Phone provider in Authentication.';
+      case 'unauthorized-domain':
+        return 'This web domain is not authorized in Firebase Console. Please add your Vercel domain under Authentication > Settings > Authorized Domains.';
+      case 'invalid-api-key':
+      case 'api-key-not-valid':
+        return 'Firebase API key is invalid or placeholder. Please provide a valid Firebase project API key in firebase_options.dart.';
+      case 'app-not-authorized':
+        return 'This app is not authorized to use Firebase Authentication with the provided API key.';
+      case 'invalid-app-credential':
+        return 'Phone verification failed. On Web, please complete the reCAPTCHA. On Android, verify SHA-256 fingerprint in Firebase Console.';
+      case 'missing-verification-code':
+        return 'Please enter the complete 6-digit OTP.';
       default:
-        return e.message ?? 'An unexpected authentication error occurred (${e.code}).';
+        return 'Unable to send OTP. Please check your number and internet connection.';
     }
   }
 }

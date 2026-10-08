@@ -77,33 +77,34 @@ class _OtpScreenState extends State<OtpScreen> {
       final ownerName = widget.arguments['ownerName'];
       final businessName = widget.arguments['businessName'];
       final email = widget.arguments['email'];
+      final businessType = widget.arguments['businessType'];
       final isNewAccount = widget.arguments['isNewAccount'] ?? false;
 
       await _authRepo.verifyOtpAndLogin(
         mobile: mobile,
         otp: otp,
+        isNewAccount: isNewAccount,
         verificationId: verificationId,
         ownerName: ownerName,
         businessName: businessName,
         email: email,
+        businessType: businessType,
       );
 
       setState(() => _isSuccess = true);
       await Future.delayed(const Duration(milliseconds: 600));
       if (!mounted) return;
 
-      if (isNewAccount || !_authRepo.isOnboardingDone) {
-        // Go to Onboarding (First-time user flow)
-        Navigator.pushNamedAndRemoveUntil(context, AppRoutes.onboarding, (r) => false);
-      } else if (!_authRepo.isBusinessSetupDone) {
-        // Business setup
+      if (isNewAccount) {
+        // Go to shop type setup / business profile for new account
         Navigator.pushNamedAndRemoveUntil(context, AppRoutes.shopType, (r) => false);
       } else {
-        // Direct to Dashboard for returning user
+        // Direct to Dashboard for existing user with their restored data
         Navigator.pushNamedAndRemoveUntil(context, AppRoutes.dashboard, (r) => false);
       }
     } catch (e) {
-      setState(() => _errorMessage = e.toString());
+      final msg = e.toString().replaceFirst(RegExp(r'^(Exception|AuthException|ValidationException):\s*'), '');
+      setState(() => _errorMessage = msg);
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -199,21 +200,48 @@ class _OtpScreenState extends State<OtpScreen> {
 
                   if (_errorMessage != null) ...[
                     Container(
-                      padding: const EdgeInsets.all(12),
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
                       decoration: BoxDecoration(
                         color: AppColors.errorLight,
-                        borderRadius: BorderRadius.circular(12),
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(color: AppColors.error.withOpacity(0.3)),
                       ),
-                      child: Row(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const Icon(Icons.error_outline_rounded, size: 18, color: AppColors.error),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Text(
-                              _errorMessage!,
-                              style: AppTypography.caption.copyWith(color: AppColors.error),
-                            ),
+                          Row(
+                            children: [
+                              const Icon(Icons.error_outline_rounded, size: 18, color: AppColors.error),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  _errorMessage!,
+                                  style: AppTypography.caption.copyWith(color: AppColors.error, fontWeight: FontWeight.w600),
+                                ),
+                              ),
+                            ],
                           ),
+                          if (_errorMessage!.contains('Account not found') ||
+                              _errorMessage!.contains('create an account first')) ...[
+                            const SizedBox(height: 10),
+                            SizedBox(
+                              width: double.infinity,
+                              height: 38,
+                              child: ElevatedButton.icon(
+                                onPressed: () {
+                                  Navigator.pushNamedAndRemoveUntil(context, AppRoutes.createAccount, (r) => false);
+                                },
+                                icon: const Icon(Icons.person_add_rounded, size: 16),
+                                label: const Text('Create Account Now',
+                                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: AppColors.primaryPinkDark,
+                                  foregroundColor: Colors.white,
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                ),
+                              ),
+                            ),
+                          ],
                         ],
                       ),
                     ),
@@ -289,23 +317,24 @@ class _OtpScreenState extends State<OtpScreen> {
                             _startResendTimer();
                             setState(() => _errorMessage = null);
                             try {
-                              await _authRepo.sendOtp(
+                              final isNew = widget.arguments['isNewAccount'] ?? false;
+                              final newVerId = await _authRepo.sendOtp(
                                 mobile,
-                                onCodeSent: (newVerId) {
-                                  widget.arguments['verificationId'] = newVerId;
-                                },
+                                isNewAccount: isNew,
                               );
+                              widget.arguments['verificationId'] = newVerId;
                               if (mounted) {
                                 ScaffoldMessenger.of(context).showSnackBar(
                                   const SnackBar(
-                                    content: Text('OTP sent via SMS! Please check your messages.'),
-                                    backgroundColor: AppColors.primaryPinkDark,
+                                    content: Text('OTP sent successfully.'),
+                                    backgroundColor: AppColors.mintGreenDark,
                                   ),
                                 );
                               }
                             } catch (e) {
                               if (mounted) {
-                                setState(() => _errorMessage = e.toString());
+                                final msg = e.toString().replaceFirst(RegExp(r'^(Exception|AuthException|ValidationException):\s*'), '');
+                                setState(() => _errorMessage = msg);
                               }
                             }
                           },
