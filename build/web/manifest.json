@@ -1,0 +1,11 @@
+{
+  "name": "SCANZO - Smart Billing & Business Management",
+  "short_name": "SCANZO",
+  "start_url": ".",
+  "display": "standalone",
+  "background_color": "#FFF0F5",
+  "theme_color": "#F8BBD0",
+  "description": "Smart Billing & Business Management",
+  "orientation": "portrait-primary",
+  "prefer_related_applications": false
+}

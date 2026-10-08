@@ -1,0 +1,1 @@
+ C:\\Users\\LENOVO\\Desktop\\smart\ billing\ app\\build\\web\\manifest.json:  C:\\Users\\LENOVO\\Desktop\\smart\ billing\ app\\web\\index.html C:\\Users\\LENOVO\\Desktop\\smart\ billing\ app\\web\\manifest.json
