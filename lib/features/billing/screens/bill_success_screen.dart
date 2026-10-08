@@ -4,6 +4,7 @@ import '../../../core/constants/app_typography.dart';
 import '../../../core/utils/currency_formatter.dart';
 import '../../../core/utils/date_formatter.dart';
 import '../../../shared/widgets/scanzo_button.dart';
+import '../../../shared/widgets/scanzo_logo.dart';
 import '../../../data/models/sale.dart';
 import '../../../app/routes.dart';
 
@@ -27,10 +28,13 @@ class BillSuccessScreen extends StatelessWidget {
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
+                  const ScanzoLogo.badge(size: 70),
+                  const SizedBox(height: 16),
+
                   // Animated Success Icon Circle
                   Container(
-                    width: 90,
-                    height: 90,
+                    width: 76,
+                    height: 76,
                     decoration: const BoxDecoration(
                       color: AppColors.mintGreen,
                       shape: BoxShape.circle,

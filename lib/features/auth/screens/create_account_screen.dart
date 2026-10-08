@@ -9,6 +9,7 @@ import '../../../data/repositories/auth_repository.dart';
 import '../../../app/routes.dart';
 
 import '../../../shared/widgets/scanzo_animated_background.dart';
+import '../../../shared/widgets/scanzo_logo.dart';
 
 class CreateAccountScreen extends StatefulWidget {
   const CreateAccountScreen({super.key});
@@ -45,7 +46,13 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
     setState(() => _isLoading = true);
     try {
       final mobile = _mobileController.text.trim();
-      await _authRepo.sendOtp(mobile);
+      String? sentVerificationId;
+      await _authRepo.sendOtp(
+        mobile,
+        onCodeSent: (verificationId) {
+          sentVerificationId = verificationId;
+        },
+      );
       if (!mounted) return;
 
       Navigator.pushNamed(
@@ -53,6 +60,7 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
         AppRoutes.otp,
         arguments: {
           'mobile': mobile,
+          'verificationId': sentVerificationId,
           'ownerName': _ownerNameController.text.trim(),
           'businessName': _businessNameController.text.trim(),
           'email': _emailController.text.trim(),
@@ -109,19 +117,7 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
                         children: [
                           Row(
                             children: [
-                              Container(
-                                width: 44,
-                                height: 44,
-                                decoration: BoxDecoration(
-                                  color: AppColors.primaryPinkLight,
-                                  borderRadius: BorderRadius.circular(14),
-                                ),
-                                child: const Icon(
-                                  Icons.store_rounded,
-                                  color: AppColors.primaryPinkDark,
-                                  size: 24,
-                                ),
-                              ),
+                              const ScanzoLogo.icon(size: 44),
                               const SizedBox(width: 14),
                               Expanded(
                                 child: Column(

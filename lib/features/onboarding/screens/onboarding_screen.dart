@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_typography.dart';
 import '../../../shared/widgets/scanzo_button.dart';
+import '../../../shared/widgets/scanzo_logo.dart';
 import '../../../data/repositories/auth_repository.dart';
 import '../../../app/routes.dart';
 
@@ -59,7 +60,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       body: SafeArea(
         child: Column(
           children: [
-            // Top Bar: Back & Skip
+            // Top Bar: Back, Brand Logo & Skip
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               child: Row(
@@ -72,6 +73,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                     )
                   else
                     const SizedBox(width: 48),
+                  const ScanzoLogo.icon(size: 34),
                   TextButton(
                     onPressed: _handleFinish,
                     child: Text(

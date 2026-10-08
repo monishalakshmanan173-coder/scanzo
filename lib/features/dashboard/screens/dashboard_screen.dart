@@ -18,6 +18,7 @@ import '../../../shared/widgets/pastel_card.dart';
 import '../widgets/dashboard_charts.dart';
 import '../../../app/routes.dart';
 import '../../../shared/widgets/scanzo_animated_background.dart';
+import '../../../shared/widgets/scanzo_logo.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -441,6 +442,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           ],
                         ),
                       ),
+                      const ScanzoLogo.icon(size: 36),
+                      const SizedBox(width: 4),
                       IconButton(
                         icon: const Icon(Icons.settings_outlined, color: AppColors.textPrimary),
                         tooltip: 'Settings',

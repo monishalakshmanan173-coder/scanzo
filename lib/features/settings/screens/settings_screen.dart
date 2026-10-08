@@ -352,6 +352,64 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
+  void _showUpiConfigDialog() {
+    final controller = TextEditingController(text: _business?.upiId ?? '');
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Row(
+          children: [
+            Icon(Icons.qr_code_rounded, color: AppColors.mintGreenDark),
+            SizedBox(width: 8),
+            Text('Configure Store UPI ID', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Enter your business UPI ID (VPA) to accept payments via GPay, PhonePe, Paytm QR:',
+              style: TextStyle(fontSize: 13),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: controller,
+              decoration: InputDecoration(
+                hintText: 'e.g. storename@okaxis, 9876543210@upi',
+                filled: true,
+                fillColor: AppColors.backgroundCream,
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          ElevatedButton(
+            onPressed: () async {
+              Navigator.pop(ctx);
+              await _businessRepo.updateStoreUpiId(controller.text.trim());
+              _loadSettings();
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Store UPI ID updated successfully!'),
+                    backgroundColor: AppColors.primaryPinkDark,
+                  ),
+                );
+              }
+            },
+            style: ElevatedButton.styleFrom(backgroundColor: AppColors.primaryPinkDark),
+            child: const Text('Save UPI ID', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final activeShopType = ShopType.getById(_businessRepo.activeStoreType);
@@ -457,6 +515,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 title: 'Tax & GST Settings',
                 subtitle: _settings.enableGst ? 'GST Active (${_settings.defaultGstRate.toInt()}%)' : 'GST Disabled',
                 onTap: () => Navigator.pushNamed(context, AppRoutes.businessDetails).then((_) => _loadSettings()),
+              ),
+              _buildSettingTile(
+                icon: Icons.qr_code_rounded,
+                iconColor: AppColors.mintGreenDark,
+                title: 'Store UPI & QR Payment ID',
+                subtitle: (_business != null && _business!.upiId.isNotEmpty)
+                    ? 'Active UPI ID: ${_business!.upiId}'
+                    : 'Tap to configure UPI ID for GPay & PhonePe payments',
+                onTap: _showUpiConfigDialog,
               ),
               _buildSettingTile(
                 icon: Icons.notification_important_outlined,

@@ -35,6 +35,7 @@ class _BusinessDetailsScreenState extends State<BusinessDetailsScreen> {
   late TextEditingController _pincodeController;
   late TextEditingController _gstinController;
   late TextEditingController _invoicePrefixController;
+  late TextEditingController _upiIdController;
 
   bool _isGstEnabled = true;
   double _defaultGstRate = 5.0;
@@ -67,6 +68,9 @@ class _BusinessDetailsScreenState extends State<BusinessDetailsScreen> {
     _invoicePrefixController = TextEditingController(
       text: existingProfile?.invoicePrefix ?? AppConstants.defaultInvoicePrefix,
     );
+    _upiIdController = TextEditingController(
+      text: existingProfile?.upiId ?? '',
+    );
 
     if (existingProfile != null) {
       _isGstEnabled = existingProfile.isGstEnabled;
@@ -86,6 +90,7 @@ class _BusinessDetailsScreenState extends State<BusinessDetailsScreen> {
     _pincodeController.dispose();
     _gstinController.dispose();
     _invoicePrefixController.dispose();
+    _upiIdController.dispose();
     super.dispose();
   }
 
@@ -114,6 +119,7 @@ class _BusinessDetailsScreenState extends State<BusinessDetailsScreen> {
         isGstEnabled: _isGstEnabled,
         defaultGstRate: _defaultGstRate,
         shopTypeId: shopTypeId,
+        upiId: _upiIdController.text.trim(),
         createdAt: existing?.createdAt ?? DateTime.now(),
         updatedAt: DateTime.now(),
       );
@@ -345,6 +351,33 @@ class _BusinessDetailsScreenState extends State<BusinessDetailsScreen> {
                               ],
                             ),
                           ],
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+
+                    // Digital UPI Payments Card
+                    _buildSectionHeader('UPI & Digital Payment (GPay, PhonePe, Paytm)', Icons.qr_code_rounded, AppColors.mintGreenDark),
+                    Container(
+                      padding: const EdgeInsets.all(18),
+                      decoration: BoxDecoration(
+                        color: AppColors.surfaceWhite,
+                        borderRadius: BorderRadius.circular(18),
+                        border: Border.all(color: AppColors.borderLight),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          ScanzoTextField(
+                            label: 'Store UPI ID (VPA) for Customer QR Payments',
+                            hint: 'e.g. storename@okaxis, 9876543210@upi',
+                            controller: _upiIdController,
+                          ),
+                          const SizedBox(height: 6),
+                          Text(
+                            'Customers will scan your dynamic bill QR code via Google Pay, PhonePe, or Paytm during POS checkout.',
+                            style: AppTypography.caption.copyWith(color: AppColors.textMuted),
+                          ),
                         ],
                       ),
                     ),

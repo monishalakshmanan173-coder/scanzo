@@ -9,6 +9,7 @@ import '../../../data/repositories/auth_repository.dart';
 import '../../../app/routes.dart';
 
 import '../../../shared/widgets/scanzo_animated_background.dart';
+import '../../../shared/widgets/scanzo_logo.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -38,7 +39,13 @@ class _LoginScreenState extends State<LoginScreen> {
     setState(() => _isLoading = true);
     try {
       final mobile = _mobileController.text.trim();
-      await _authRepo.sendOtp(mobile);
+      String? sentVerificationId;
+      await _authRepo.sendOtp(
+        mobile,
+        onCodeSent: (verificationId) {
+          sentVerificationId = verificationId;
+        },
+      );
       if (!mounted) return;
 
       Navigator.pushNamed(
@@ -46,6 +53,7 @@ class _LoginScreenState extends State<LoginScreen> {
         AppRoutes.otp,
         arguments: {
           'mobile': mobile,
+          'verificationId': sentVerificationId,
           'isNewAccount': false,
         },
       );
@@ -71,26 +79,10 @@ class _LoginScreenState extends State<LoginScreen> {
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    // Logo
-                    Container(
-                      width: 80,
-                      height: 80,
-                      decoration: BoxDecoration(
-                        color: AppColors.surfaceWhite,
-                        borderRadius: BorderRadius.circular(24),
-                        boxShadow: const [
-                          BoxShadow(
-                            color: Color(0x15F48FB1),
-                            blurRadius: 20,
-                            offset: Offset(0, 6),
-                          ),
-                        ],
-                      ),
-                      child: const Icon(
-                        Icons.point_of_sale_rounded,
-                        size: 42,
-                        color: AppColors.primaryPinkDark,
-                      ),
+                    // Official Scanzo Brand Logo
+                    const ScanzoLogo(
+                      size: 96,
+                      heroTag: 'scanzo_logo',
                     ),
                     const SizedBox(height: 18),
 

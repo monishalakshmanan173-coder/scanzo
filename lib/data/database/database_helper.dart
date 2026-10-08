@@ -351,15 +351,25 @@ class DatabaseHelper {
     await _persistProducts();
   }
 
+  String _activeUserId = '';
+  String get activeUserId => _activeUserId;
+  void setActiveUserId(String uid) {
+    _activeUserId = uid;
+  }
+
   // --- STORE CONTEXT & PROFILE MANAGEMENT ---
   String get activeStoreId => _activeStoreId.isNotEmpty ? _activeStoreId : (_businessProfile?.id ?? 'store_retail');
   String get activeStoreType => _businessProfile?.shopTypeId ?? 'retail';
   String get activeStoreName => _businessProfile?.businessName ?? 'SCANZO Store';
   BusinessProfile? get businessProfile => _stores[activeStoreId] ?? _businessProfile;
 
-  List<BusinessProfile> getAllStores() {
-    return _stores.values.toList()
-      ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+  List<BusinessProfile> getAllStores({String? userId}) {
+    final uid = userId ?? _activeUserId;
+    var list = _stores.values.toList();
+    if (uid.isNotEmpty) {
+      list = list.where((s) => s.userId == uid).toList();
+    }
+    return list..sort((a, b) => b.createdAt.compareTo(a.createdAt));
   }
 
   BusinessProfile? getStoreById(String storeId) => _stores[storeId];
@@ -381,29 +391,35 @@ class DatabaseHelper {
   }
 
   Future<void> saveBusinessProfile(BusinessProfile profile, {bool makeActive = true}) async {
-    _stores[profile.id] = profile;
+    final effectiveUserId = profile.userId.isNotEmpty ? profile.userId : _activeUserId;
+    final toSave = (profile.userId.isEmpty && effectiveUserId.isNotEmpty)
+        ? profile.copyWith(userId: effectiveUserId)
+        : profile;
+
+    _stores[toSave.id] = toSave;
     if (makeActive || _activeStoreId.isEmpty) {
-      _activeStoreId = profile.id;
-      _businessProfile = profile;
+      _activeStoreId = toSave.id;
+      _businessProfile = toSave;
     }
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('active_store_id', _activeStoreId);
-    await prefs.setString(AppConstants.keyActiveBusiness, jsonEncode((_businessProfile ?? profile).toMap()));
+    await prefs.setString(AppConstants.keyActiveBusiness, jsonEncode((_businessProfile ?? toSave).toMap()));
     await prefs.setBool(AppConstants.keyBusinessSetupCompleted, true);
     await _persistStores();
 
     // Ensure category seed
-    if (_categories.values.where((c) => c.storeId == profile.id).isEmpty) {
-      _seedCategoriesForStore(profile.id, profile.shopTypeId);
+    if (_categories.values.where((c) => c.storeId == toSave.id).isEmpty) {
+      _seedCategoriesForStore(toSave.id, toSave.shopTypeId);
       await _persistCategories();
     }
   }
 
   Future<BusinessProfile> createOrGetStoreForShopType(String shopTypeId, {String? storeName}) async {
-    // Check if store with this shop type already exists
+    // Check if store with this shop type already exists for current user
     final cleanType = shopTypeId.toLowerCase();
     for (var s in _stores.values) {
-      if (s.shopTypeId.toLowerCase() == cleanType) {
+      final userMatches = _activeUserId.isEmpty ? true : s.userId == _activeUserId;
+      if (s.shopTypeId.toLowerCase() == cleanType && userMatches) {
         await setActiveStore(s.id);
         return s;
       }
@@ -416,6 +432,7 @@ class DatabaseHelper {
 
     final profile = BusinessProfile(
       id: newStoreId,
+      userId: _activeUserId,
       businessName: name,
       ownerName: _businessProfile?.ownerName ?? 'Store Owner',
       mobile: _businessProfile?.mobile ?? '9876543210',
@@ -670,8 +687,11 @@ class DatabaseHelper {
       // Stock Deduction and Movement
       final product = _products[item.productId];
       if (product != null && (product.storeId == sid || (product.storeId.isEmpty && sid == activeStoreId))) {
+        if (product.currentStock < item.quantity) {
+          throw Exception('Insufficient inventory for "${product.name}". Available: ${product.currentStock.toStringAsFixed(0)}, Requested: ${item.quantity.toStringAsFixed(0)}');
+        }
         final prevStock = product.currentStock;
-        final newStock = prevStock - item.quantity;
+        final newStock = (prevStock - item.quantity).clamp(0.0, double.infinity);
         _products[product.id] = product.copyWith(currentStock: newStock);
 
         _stockMovements.add(StockMovement(

@@ -2,12 +2,12 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../../core/constants/app_colors.dart';
-import '../../../core/constants/app_constants.dart';
 import '../../../core/constants/app_typography.dart';
 import '../../../shared/widgets/scanzo_button.dart';
 import '../../../data/repositories/auth_repository.dart';
 import '../../../app/routes.dart';
 import '../../../shared/widgets/scanzo_animated_background.dart';
+import '../../../shared/widgets/scanzo_logo.dart';
 
 class OtpScreen extends StatefulWidget {
   final Map<String, dynamic> arguments;
@@ -73,6 +73,7 @@ class _OtpScreenState extends State<OtpScreen> {
     setState(() => _isLoading = true);
     try {
       final mobile = widget.arguments['mobile'] ?? '';
+      final verificationId = widget.arguments['verificationId'] as String?;
       final ownerName = widget.arguments['ownerName'];
       final businessName = widget.arguments['businessName'];
       final email = widget.arguments['email'];
@@ -81,6 +82,7 @@ class _OtpScreenState extends State<OtpScreen> {
       await _authRepo.verifyOtpAndLogin(
         mobile: mobile,
         otp: otp,
+        verificationId: verificationId,
         ownerName: ownerName,
         businessName: businessName,
         email: email,
@@ -164,18 +166,9 @@ class _OtpScreenState extends State<OtpScreen> {
                 constraints: const BoxConstraints(maxWidth: 440),
                 child: Column(
                 children: [
-                  Container(
-                    width: 74,
-                    height: 74,
-                    decoration: BoxDecoration(
-                      color: AppColors.primaryPinkLight,
-                      shape: BoxShape.circle,
-                    ),
-                    child: const Icon(
-                      Icons.mark_email_read_rounded,
-                      size: 38,
-                      color: AppColors.primaryPinkDark,
-                    ),
+                  const ScanzoLogo.badge(
+                    size: 80,
+                    heroTag: 'scanzo_logo',
                   ),
                   const SizedBox(height: 20),
 
@@ -202,24 +195,7 @@ class _OtpScreenState extends State<OtpScreen> {
                       ),
                     ],
                   ),
-                  const SizedBox(height: 8),
-
-                  // Dev test OTP reminder hint
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                    decoration: BoxDecoration(
-                      color: AppColors.lightYellow,
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: Text(
-                      'Development test OTP: ${AppConstants.devTestOtp}',
-                      style: AppTypography.caption.copyWith(
-                        color: AppColors.lightYellowDark,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 28),
+                  const SizedBox(height: 24),
 
                   if (_errorMessage != null) ...[
                     Container(
@@ -309,12 +285,29 @@ class _OtpScreenState extends State<OtpScreen> {
                       ),
                       if (_resendTimer == 0)
                         GestureDetector(
-                          onTap: () {
+                          onTap: () async {
                             _startResendTimer();
-                            _authRepo.sendOtp(mobile);
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(content: Text('OTP Resent successfully!')),
-                            );
+                            setState(() => _errorMessage = null);
+                            try {
+                              await _authRepo.sendOtp(
+                                mobile,
+                                onCodeSent: (newVerId) {
+                                  widget.arguments['verificationId'] = newVerId;
+                                },
+                              );
+                              if (mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text('OTP sent via SMS! Please check your messages.'),
+                                    backgroundColor: AppColors.primaryPinkDark,
+                                  ),
+                                );
+                              }
+                            } catch (e) {
+                              if (mounted) {
+                                setState(() => _errorMessage = e.toString());
+                              }
+                            }
                           },
                           child: Text(
                             'Resend Code',

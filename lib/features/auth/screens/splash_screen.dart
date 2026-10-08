@@ -4,6 +4,7 @@ import '../../../core/constants/app_constants.dart';
 import '../../../core/constants/app_typography.dart';
 import '../../../data/services/session_service.dart';
 import '../../../app/routes.dart';
+import '../../../shared/widgets/scanzo_logo.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -96,53 +97,12 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      // Cute Shop / Billing Logo Icon Container
-                      Container(
-                        width: 110,
-                        height: 110,
-                        decoration: BoxDecoration(
-                          color: AppColors.surfaceWhite,
-                          borderRadius: BorderRadius.circular(30),
-                          boxShadow: const [
-                            BoxShadow(
-                              color: Color(0x18F48FB1),
-                              blurRadius: 24,
-                              offset: Offset(0, 8),
-                            ),
-                          ],
-                        ),
-                        child: Stack(
-                          alignment: Alignment.center,
-                          children: [
-                            Container(
-                              width: 84,
-                              height: 84,
-                              decoration: BoxDecoration(
-                                color: AppColors.primaryPinkLight,
-                                borderRadius: BorderRadius.circular(22),
-                              ),
-                              child: const Icon(
-                                Icons.point_of_sale_rounded,
-                                size: 46,
-                                color: AppColors.primaryPinkDark,
-                              ),
-                            ),
-                            Positioned(
-                              top: 14,
-                              right: 14,
-                              child: Container(
-                                width: 14,
-                                height: 14,
-                                decoration: const BoxDecoration(
-                                  color: AppColors.mintGreenDark,
-                                  shape: BoxShape.circle,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
+                      // Official Scanzo Brand Logo
+                      const ScanzoLogo.large(
+                        size: 130,
+                        heroTag: 'scanzo_logo',
                       ),
-                      const SizedBox(height: 24),
+                      const SizedBox(height: 20),
                       // SCANZO Typography
                       Text(
                         AppConstants.appName,

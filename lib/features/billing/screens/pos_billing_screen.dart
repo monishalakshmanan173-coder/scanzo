@@ -12,6 +12,8 @@ import '../../../data/models/sale_item.dart';
 import '../../../data/repositories/product_repository.dart';
 import '../../../data/repositories/billing_repository.dart';
 import '../../../data/repositories/customer_repository.dart';
+import 'package:qr_flutter/qr_flutter.dart';
+import '../../../data/repositories/business_repository.dart';
 import '../../../app/routes.dart';
 
 class PosBillingScreen extends StatefulWidget {
@@ -25,6 +27,7 @@ class _PosBillingScreenState extends State<PosBillingScreen> {
   final _productRepo = ProductRepository();
   final _billingRepo = BillingRepository();
   final _customerRepo = CustomerRepository();
+  final _businessRepo = BusinessRepository();
 
   final _searchController = TextEditingController();
   final _paidAmountController = TextEditingController();
@@ -164,23 +167,521 @@ class _PosBillingScreenState extends State<PosBillingScreen> {
     _paidAmountController.text = _grandTotal.toStringAsFixed(2);
   }
 
-  Future<void> _handleCheckout() async {
-    setState(() => _errorMessage = null);
+  void _showPaymentModal() {
     if (_cartItems.isEmpty) {
-      setState(() => _errorMessage = 'Cart is empty. Please add items to checkout.');
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Cart is empty. Please add items to checkout.')),
+      );
       return;
     }
 
-    final paidAmount = double.tryParse(_paidAmountController.text.trim()) ?? _grandTotal;
-    if (paidAmount < 0) {
-      setState(() => _errorMessage = 'Paid amount cannot be negative');
-      return;
-    }
+    String activeTab = (_selectedPaymentMethod == 'UPI' || _selectedPaymentMethod == 'GPay') ? 'UPI' : 'Cash';
+    final cashController = TextEditingController(text: _grandTotal.toStringAsFixed(0));
+    final upiInputController = TextEditingController(text: _businessRepo.activeStoreUpiId);
+    double cashReceived = double.tryParse(cashController.text) ?? _grandTotal;
 
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (modalCtx) => StatefulBuilder(
+        builder: (context, setModalState) {
+          final isCash = activeTab == 'Cash';
+          final changeToReturn = cashReceived >= _grandTotal ? (cashReceived - _grandTotal) : 0.0;
+          final isInsufficient = isCash && (cashReceived < _grandTotal);
+          final upiId = _businessRepo.activeStoreUpiId;
+          final storeName = _businessRepo.activeStoreName.isNotEmpty
+              ? _businessRepo.activeStoreName
+              : AppConstants.appName;
+          final upiUri = 'upi://pay?pa=$upiId&pn=${Uri.encodeComponent(storeName)}&am=${_grandTotal.toStringAsFixed(2)}&cu=INR&tn=${Uri.encodeComponent("Scanzo Bill")}';
+
+          return Container(
+            constraints: BoxConstraints(
+              maxHeight: MediaQuery.of(context).size.height * 0.90,
+            ),
+            decoration: const BoxDecoration(
+              color: AppColors.surfaceWhite,
+              borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+            ),
+            padding: EdgeInsets.only(
+              bottom: MediaQuery.of(context).viewInsets.bottom + 16,
+              left: 20,
+              right: 20,
+              top: 14,
+            ),
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  // Handle bar
+                  Center(
+                    child: Container(
+                      width: 44,
+                      height: 4,
+                      decoration: BoxDecoration(
+                        color: AppColors.borderLight,
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+
+                  // Header with Grand Total
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('Checkout & Payment', style: AppTypography.h3.copyWith(fontSize: 18)),
+                          Text('${_cartItems.length} items in cart', style: AppTypography.caption),
+                        ],
+                      ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                        decoration: BoxDecoration(
+                          color: AppColors.primaryPinkLight,
+                          borderRadius: BorderRadius.circular(14),
+                          border: Border.all(color: AppColors.primaryPinkDark.withOpacity(0.3)),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: [
+                            Text('Grand Total', style: AppTypography.caption.copyWith(fontSize: 10)),
+                            Text(
+                              CurrencyFormatter.format(_grandTotal),
+                              style: AppTypography.h3.copyWith(
+                                color: AppColors.primaryPinkDark,
+                                fontWeight: FontWeight.w800,
+                                fontSize: 18,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+
+                  // Payment Tabs: Cash vs GPay / UPI
+                  Container(
+                    padding: const EdgeInsets.all(4),
+                    decoration: BoxDecoration(
+                      color: AppColors.backgroundCream,
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: GestureDetector(
+                            onTap: () => setModalState(() {
+                              activeTab = 'Cash';
+                              setState(() => _selectedPaymentMethod = 'Cash');
+                            }),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(vertical: 10),
+                              decoration: BoxDecoration(
+                                color: isCash ? AppColors.surfaceWhite : Colors.transparent,
+                                borderRadius: BorderRadius.circular(12),
+                                boxShadow: isCash
+                                    ? [
+                                        BoxShadow(
+                                          color: Colors.black.withOpacity(0.06),
+                                          blurRadius: 6,
+                                          offset: const Offset(0, 2),
+                                        ),
+                                      ]
+                                    : null,
+                              ),
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Icon(
+                                    Icons.payments_rounded,
+                                    size: 18,
+                                    color: isCash ? AppColors.primaryPinkDark : AppColors.textSecondary,
+                                  ),
+                                  const SizedBox(width: 6),
+                                  Text(
+                                    'Cash Payment',
+                                    style: TextStyle(
+                                      fontWeight: isCash ? FontWeight.bold : FontWeight.w500,
+                                      color: isCash ? AppColors.primaryPinkDark : AppColors.textSecondary,
+                                      fontSize: 13,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                        Expanded(
+                          child: GestureDetector(
+                            onTap: () => setModalState(() {
+                              activeTab = 'UPI';
+                              setState(() => _selectedPaymentMethod = 'GPay / UPI');
+                            }),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(vertical: 10),
+                              decoration: BoxDecoration(
+                                color: !isCash ? AppColors.surfaceWhite : Colors.transparent,
+                                borderRadius: BorderRadius.circular(12),
+                                boxShadow: !isCash
+                                    ? [
+                                        BoxShadow(
+                                          color: Colors.black.withOpacity(0.06),
+                                          blurRadius: 6,
+                                          offset: const Offset(0, 2),
+                                        ),
+                                      ]
+                                    : null,
+                              ),
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Icon(
+                                    Icons.qr_code_scanner_rounded,
+                                    size: 18,
+                                    color: !isCash ? AppColors.mintGreenDark : AppColors.textSecondary,
+                                  ),
+                                  const SizedBox(width: 6),
+                                  Text(
+                                    'GPay / UPI QR',
+                                    style: TextStyle(
+                                      fontWeight: !isCash ? FontWeight.bold : FontWeight.w500,
+                                      color: !isCash ? AppColors.mintGreenDark : AppColors.textSecondary,
+                                      fontSize: 13,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+
+                  if (isCash) ...[
+                    // CASH PAYMENT SECTION
+                    const Text('Cash Received from Customer:', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+                    const SizedBox(height: 8),
+                    TextField(
+                      controller: cashController,
+                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                      style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+                      decoration: InputDecoration(
+                        prefixIcon: const Padding(
+                          padding: EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                          child: Text('₹', style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: AppColors.textPrimary)),
+                        ),
+                        filled: true,
+                        fillColor: AppColors.backgroundCream,
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                        suffixIcon: IconButton(
+                          icon: const Icon(Icons.clear_rounded, size: 20),
+                          onPressed: () {
+                            cashController.clear();
+                            setModalState(() => cashReceived = 0.0);
+                          },
+                        ),
+                      ),
+                      onChanged: (val) {
+                        setModalState(() {
+                          cashReceived = double.tryParse(val.trim()) ?? 0.0;
+                        });
+                      },
+                    ),
+                    const SizedBox(height: 10),
+
+                    // Quick Chips
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 6,
+                      children: [
+                        ActionChip(
+                          label: Text('Exact: ${CurrencyFormatter.format(_grandTotal)}', style: const TextStyle(fontSize: 11)),
+                          backgroundColor: AppColors.surfaceWhite,
+                          side: const BorderSide(color: AppColors.primaryPinkDark),
+                          onPressed: () {
+                            cashController.text = _grandTotal.toStringAsFixed(0);
+                            setModalState(() => cashReceived = _grandTotal);
+                          },
+                        ),
+                        if (_grandTotal < 500)
+                          ActionChip(
+                            label: const Text('₹500', style: TextStyle(fontSize: 11)),
+                            backgroundColor: AppColors.surfaceWhite,
+                            onPressed: () {
+                              cashController.text = '500';
+                              setModalState(() => cashReceived = 500);
+                            },
+                          ),
+                        if (_grandTotal < 1000)
+                          ActionChip(
+                            label: const Text('₹1000', style: TextStyle(fontSize: 11)),
+                            backgroundColor: AppColors.surfaceWhite,
+                            onPressed: () {
+                              cashController.text = '1000';
+                              setModalState(() => cashReceived = 1000);
+                            },
+                          ),
+                        if (_grandTotal < 2000)
+                          ActionChip(
+                            label: const Text('₹2000', style: TextStyle(fontSize: 11)),
+                            backgroundColor: AppColors.surfaceWhite,
+                            onPressed: () {
+                              cashController.text = '2000';
+                              setModalState(() => cashReceived = 2000);
+                            },
+                          ),
+                      ],
+                    ),
+                    const SizedBox(height: 14),
+
+                    // Real-time Change / Insufficient validation card
+                    Container(
+                      padding: const EdgeInsets.all(14),
+                      decoration: BoxDecoration(
+                        color: isInsufficient ? AppColors.errorLight : AppColors.mintGreen.withOpacity(0.4),
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(
+                          color: isInsufficient ? AppColors.error : AppColors.mintGreenDark.withOpacity(0.4),
+                        ),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(
+                            isInsufficient ? Icons.warning_amber_rounded : Icons.change_circle_rounded,
+                            color: isInsufficient ? AppColors.error : AppColors.mintGreenDark,
+                            size: 26,
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  isInsufficient
+                                      ? 'Insufficient Cash Received'
+                                      : (changeToReturn > 0 ? 'Change to Return' : 'Exact Amount Paid'),
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w600,
+                                    color: isInsufficient ? AppColors.error : AppColors.mintGreenDark,
+                                  ),
+                                ),
+                                Text(
+                                  isInsufficient
+                                      ? 'Short by ${CurrencyFormatter.format(_grandTotal - cashReceived)}'
+                                      : CurrencyFormatter.format(changeToReturn),
+                                  style: TextStyle(
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.bold,
+                                    color: isInsufficient ? AppColors.error : AppColors.mintGreenDark,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 18),
+
+                    ScanzoButton(
+                      text: isInsufficient
+                          ? 'Enter Adequate Cash to Confirm'
+                          : 'Confirm Cash Sale (${CurrencyFormatter.format(_grandTotal)})',
+                      onPressed: isInsufficient || _isProcessing
+                          ? null
+                          : () async {
+                              Navigator.pop(modalCtx);
+                              _paidAmountController.text = cashReceived.toStringAsFixed(2);
+                              await _handleCompleteCheckout(
+                                method: 'Cash',
+                                paidAmount: cashReceived,
+                                changeAmount: changeToReturn,
+                              );
+                            },
+                      isLoading: _isProcessing,
+                      icon: Icons.check_circle_rounded,
+                      backgroundColor: AppColors.primaryPinkDark,
+                      textColor: Colors.white,
+                    ),
+                  ] else ...[
+                    // GPAY / UPI QR PAYMENT SECTION
+                    if (upiId.isEmpty) ...[
+                      // UPI ID Not Configured: Prompt to add
+                      Container(
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: AppColors.lightYellow,
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(color: AppColors.lightYellowDark.withOpacity(0.4)),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Row(
+                              children: [
+                                Icon(Icons.info_outline_rounded, color: AppColors.lightYellowDark, size: 20),
+                                SizedBox(width: 8),
+                                Text('Store UPI ID Required', style: TextStyle(fontWeight: FontWeight.bold)),
+                              ],
+                            ),
+                            const SizedBox(height: 8),
+                            const Text(
+                              'Enter your UPI ID (Google Pay / PhonePe / BHIM) to generate real QR codes for billing:',
+                              style: TextStyle(fontSize: 12),
+                            ),
+                            const SizedBox(height: 10),
+                            TextField(
+                              controller: upiInputController,
+                              decoration: InputDecoration(
+                                hintText: 'e.g. store@okaxis or 9876543210@upi',
+                                filled: true,
+                                fillColor: Colors.white,
+                                border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                                contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                              ),
+                            ),
+                            const SizedBox(height: 10),
+                            ElevatedButton(
+                              onPressed: () async {
+                                final text = upiInputController.text.trim();
+                                if (text.isNotEmpty) {
+                                  await _businessRepo.updateStoreUpiId(text);
+                                  setModalState(() {});
+                                }
+                              },
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: AppColors.primaryPinkDark,
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                              ),
+                              child: const Text('Save & Show QR', style: TextStyle(color: Colors.white)),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ] else ...[
+                      // Display dynamic QR Code
+                      Center(
+                        child: Column(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(12),
+                              decoration: BoxDecoration(
+                                color: Colors.white,
+                                borderRadius: BorderRadius.circular(18),
+                                border: Border.all(color: AppColors.mintGreenDark.withOpacity(0.3)),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: Colors.black.withOpacity(0.06),
+                                    blurRadius: 12,
+                                    offset: const Offset(0, 4),
+                                  ),
+                                ],
+                              ),
+                              child: QrImageView(
+                                data: upiUri,
+                                version: QrVersions.auto,
+                                size: 175,
+                                backgroundColor: Colors.white,
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                              decoration: BoxDecoration(
+                                color: AppColors.mintGreen.withOpacity(0.4),
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              child: Text(
+                                'UPI ID: $upiId',
+                                style: const TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.bold,
+                                  color: AppColors.mintGreenDark,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              'Customer scans with Google Pay, PhonePe, Paytm or BHIM',
+                              style: AppTypography.caption.copyWith(color: AppColors.textMuted),
+                              textAlign: TextAlign.center,
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                        decoration: BoxDecoration(
+                          color: AppColors.backgroundCream,
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.notifications_active_outlined, size: 20, color: AppColors.textSecondary),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                'Check your UPI app notification or soundbox, then click confirm below:',
+                                style: AppTypography.caption,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+
+                      ScanzoButton(
+                        text: 'Confirm Payment Received (${CurrencyFormatter.format(_grandTotal)})',
+                        onPressed: _isProcessing
+                            ? null
+                            : () async {
+                                Navigator.pop(modalCtx);
+                                _paidAmountController.text = _grandTotal.toStringAsFixed(2);
+                                await _handleCompleteCheckout(
+                                  method: 'GPay / UPI',
+                                  paidAmount: _grandTotal,
+                                  changeAmount: 0.0,
+                                );
+                              },
+                        isLoading: _isProcessing,
+                        icon: Icons.check_circle_rounded,
+                        backgroundColor: AppColors.mintGreenDark,
+                        textColor: Colors.white,
+                      ),
+                    ],
+                  ],
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  Future<void> _handleCompleteCheckout({
+    required String method,
+    required double paidAmount,
+    required double changeAmount,
+  }) async {
+    setState(() => _errorMessage = null);
+    if (_cartItems.isEmpty) return;
+
+    if (_isProcessing) return; // Prevent duplicate checkout
     setState(() => _isProcessing = true);
-    try {
-      final changeAmount = paidAmount > _grandTotal ? (paidAmount - _grandTotal) : 0.0;
 
+    try {
       final sale = await _billingRepo.processCheckout(
         customerId: _selectedCustomer?.id,
         customerName: _selectedCustomer?.name,
@@ -190,21 +691,28 @@ class _PosBillingScreenState extends State<PosBillingScreen> {
         totalDiscount: _totalDiscount,
         totalGst: _totalGst,
         grandTotal: _grandTotal,
-        paymentMethod: _selectedPaymentMethod,
+        paymentMethod: method,
         paidAmount: paidAmount,
         changeAmount: changeAmount,
       );
 
       if (!mounted) return;
 
-      // Navigate to Success screen
       Navigator.pushReplacementNamed(
         context,
         AppRoutes.billSuccess,
         arguments: {'sale': sale},
       );
     } catch (e) {
-      setState(() => _errorMessage = e.toString());
+      if (mounted) {
+        setState(() => _errorMessage = e.toString());
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(e.toString()),
+            backgroundColor: AppColors.error,
+          ),
+        );
+      }
     } finally {
       if (mounted) setState(() => _isProcessing = false);
     }
@@ -463,8 +971,8 @@ class _PosBillingScreenState extends State<PosBillingScreen> {
 
                       // Checkout Button
                       ScanzoButton(
-                        text: 'Complete Bill (${CurrencyFormatter.format(_grandTotal)})',
-                        onPressed: _cartItems.isNotEmpty && !_isProcessing ? _handleCheckout : null,
+                        text: 'Proceed to Pay (${CurrencyFormatter.format(_grandTotal)})',
+                        onPressed: _cartItems.isNotEmpty && !_isProcessing ? _showPaymentModal : null,
                         isLoading: _isProcessing,
                         icon: Icons.check_circle_rounded,
                         backgroundColor: AppColors.primaryPinkDark,

@@ -1,5 +1,6 @@
 class BusinessProfile {
   final String id;
+  final String userId;
   final String businessName;
   final String ownerName;
   final String mobile;
@@ -15,11 +16,14 @@ class BusinessProfile {
   final bool isGstEnabled;
   final double defaultGstRate;
   final String shopTypeId;
+  final String upiId;
+  final String? upiQrData;
   final DateTime createdAt;
   final DateTime updatedAt;
 
   BusinessProfile({
     required this.id,
+    this.userId = '',
     required this.businessName,
     required this.ownerName,
     required this.mobile,
@@ -35,6 +39,8 @@ class BusinessProfile {
     this.isGstEnabled = true,
     this.defaultGstRate = 5.0,
     required this.shopTypeId,
+    this.upiId = '',
+    this.upiQrData,
     required this.createdAt,
     required this.updatedAt,
   });
@@ -44,6 +50,7 @@ class BusinessProfile {
   Map<String, dynamic> toMap() {
     return {
       'id': id,
+      'userId': userId,
       'businessName': businessName,
       'ownerName': ownerName,
       'mobile': mobile,
@@ -59,6 +66,8 @@ class BusinessProfile {
       'isGstEnabled': isGstEnabled ? 1 : 0,
       'defaultGstRate': defaultGstRate,
       'shopTypeId': shopTypeId,
+      'upiId': upiId,
+      'upiQrData': upiQrData,
       'createdAt': createdAt.toIso8601String(),
       'updatedAt': updatedAt.toIso8601String(),
     };
@@ -67,6 +76,7 @@ class BusinessProfile {
   factory BusinessProfile.fromMap(Map<String, dynamic> map) {
     return BusinessProfile(
       id: map['id'] ?? '',
+      userId: map['userId'] ?? '',
       businessName: map['businessName'] ?? '',
       ownerName: map['ownerName'] ?? '',
       mobile: map['mobile'] ?? '',
@@ -82,6 +92,8 @@ class BusinessProfile {
       isGstEnabled: map['isGstEnabled'] == 1 || map['isGstEnabled'] == true,
       defaultGstRate: (map['defaultGstRate'] as num?)?.toDouble() ?? 5.0,
       shopTypeId: map['shopTypeId'] ?? 'retail',
+      upiId: map['upiId'] ?? '',
+      upiQrData: map['upiQrData'],
       createdAt: map['createdAt'] != null
           ? DateTime.tryParse(map['createdAt']) ?? DateTime.now()
           : DateTime.now(),
@@ -93,6 +105,7 @@ class BusinessProfile {
 
   BusinessProfile copyWith({
     String? id,
+    String? userId,
     String? businessName,
     String? ownerName,
     String? mobile,
@@ -108,10 +121,13 @@ class BusinessProfile {
     bool? isGstEnabled,
     double? defaultGstRate,
     String? shopTypeId,
+    String? upiId,
+    String? upiQrData,
     DateTime? updatedAt,
   }) {
     return BusinessProfile(
       id: id ?? this.id,
+      userId: userId ?? this.userId,
       businessName: businessName ?? this.businessName,
       ownerName: ownerName ?? this.ownerName,
       mobile: mobile ?? this.mobile,
@@ -127,6 +143,8 @@ class BusinessProfile {
       isGstEnabled: isGstEnabled ?? this.isGstEnabled,
       defaultGstRate: defaultGstRate ?? this.defaultGstRate,
       shopTypeId: shopTypeId ?? this.shopTypeId,
+      upiId: upiId ?? this.upiId,
+      upiQrData: upiQrData ?? this.upiQrData,
       createdAt: createdAt,
       updatedAt: updatedAt ?? DateTime.now(),
     );

@@ -206,6 +206,14 @@ class InvoicePdfService {
         pw.Row(
           mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
           children: [
+            pw.Text('Payment Mode:', style: pw.TextStyle(fontSize: fontSizeBody)),
+            pw.Text(sale.paymentMethod,
+                style: pw.TextStyle(fontSize: fontSizeBody, fontWeight: pw.FontWeight.bold)),
+          ],
+        ),
+        pw.Row(
+          mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+          children: [
             pw.Text('Amount Received:', style: pw.TextStyle(fontSize: fontSizeBody)),
             pw.Text(CurrencyFormatter.format(sale.paidAmount),
                 style: pw.TextStyle(fontSize: fontSizeBody)),
@@ -217,6 +225,15 @@ class InvoicePdfService {
             children: [
               pw.Text('Change Returned:', style: pw.TextStyle(fontSize: fontSizeBody)),
               pw.Text(CurrencyFormatter.format(sale.changeAmount),
+                  style: pw.TextStyle(fontSize: fontSizeBody)),
+            ],
+          ),
+        if (business.upiId.isNotEmpty)
+          pw.Row(
+            mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+            children: [
+              pw.Text('Store UPI ID:', style: pw.TextStyle(fontSize: fontSizeBody)),
+              pw.Text(business.upiId,
                   style: pw.TextStyle(fontSize: fontSizeBody)),
             ],
           ),
@@ -475,6 +492,28 @@ class InvoicePdfService {
                         pw.Text('Change Returned:',
                             style: const pw.TextStyle(fontSize: 10)),
                         pw.Text(CurrencyFormatter.format(sale.changeAmount),
+                            style: const pw.TextStyle(fontSize: 10)),
+                      ],
+                    ),
+                  ],
+                  pw.SizedBox(height: 4),
+                  pw.Row(
+                    mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                    children: [
+                      pw.Text('Payment Mode:',
+                          style: const pw.TextStyle(fontSize: 10)),
+                      pw.Text(sale.paymentMethod,
+                          style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold)),
+                    ],
+                  ),
+                  if (business.upiId.isNotEmpty) ...[
+                    pw.SizedBox(height: 4),
+                    pw.Row(
+                      mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                      children: [
+                        pw.Text('Store UPI ID:',
+                            style: const pw.TextStyle(fontSize: 10)),
+                        pw.Text(business.upiId,
                             style: const pw.TextStyle(fontSize: 10)),
                       ],
                     ),
