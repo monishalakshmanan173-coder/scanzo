@@ -8,11 +8,13 @@ class BillingRepository {
 
   BillingRepository({DatabaseHelper? db}) : _db = db ?? DatabaseHelper();
 
-  String getNextInvoiceNumber() => _db.generateNextInvoiceNumber();
+  String get activeStoreId => _db.activeStoreId;
 
-  List<Sale> getAllSales() => _db.getAllSales();
+  String getNextInvoiceNumber({String? storeId}) => _db.generateNextInvoiceNumber(storeId: storeId);
 
-  Sale? getSaleById(String id) => _db.getSaleById(id);
+  List<Sale> getAllSales({String? storeId}) => _db.getAllSales(storeId: storeId);
+
+  Sale? getSaleById(String id, {String? storeId}) => _db.getSaleById(id, storeId: storeId);
 
   Invoice? getInvoiceBySaleId(String saleId) => _db.getInvoiceBySaleId(saleId);
 
@@ -29,6 +31,7 @@ class BillingRepository {
     required double paidAmount,
     required double changeAmount,
     String? notes,
+    String? storeId,
   }) {
     return _db.processCheckout(
       customerId: customerId,
@@ -43,6 +46,7 @@ class BillingRepository {
       paidAmount: paidAmount,
       changeAmount: changeAmount,
       notes: notes,
+      storeId: storeId,
     );
   }
 }

@@ -7,23 +7,25 @@ class InventoryRepository {
 
   InventoryRepository({DatabaseHelper? db}) : _db = db ?? DatabaseHelper();
 
-  List<Product> getAllProducts() => _db.getAllProducts();
+  String get activeStoreId => _db.activeStoreId;
 
-  List<Product> getLowStockProducts() => _db.getLowStockProducts();
+  List<Product> getAllProducts({String? storeId}) => _db.getAllProducts(storeId: storeId);
 
-  List<StockMovement> getMovements() => _db.getAllStockMovements();
+  List<Product> getLowStockProducts({String? storeId}) => _db.getLowStockProducts(storeId: storeId);
 
-  double getTotalStockValuation() {
+  List<StockMovement> getMovements({String? storeId}) => _db.getAllStockMovements(storeId: storeId);
+
+  double getTotalStockValuation({String? storeId}) {
     double total = 0.0;
-    for (var p in _db.getAllProducts()) {
+    for (var p in _db.getAllProducts(storeId: storeId)) {
       total += p.stockValue;
     }
     return total;
   }
 
-  double getTotalRetailStockValuation() {
+  double getTotalRetailStockValuation({String? storeId}) {
     double total = 0.0;
-    for (var p in _db.getAllProducts()) {
+    for (var p in _db.getAllProducts(storeId: storeId)) {
       total += p.retailStockValue;
     }
     return total;
@@ -34,12 +36,14 @@ class InventoryRepository {
     required double newStock,
     required String type,
     String? reason,
+    String? storeId,
   }) {
     return _db.recordStockAdjustment(
       productId: productId,
       newStock: newStock,
       type: type,
       reason: reason,
+      storeId: storeId,
     );
   }
 }

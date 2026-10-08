@@ -6,9 +6,11 @@ class SupplierRepository {
 
   SupplierRepository({DatabaseHelper? db}) : _db = db ?? DatabaseHelper();
 
-  List<Supplier> getAllSuppliers() => _db.getAllSuppliers();
+  String get activeStoreId => _db.activeStoreId;
 
-  Supplier? getSupplierById(String id) => _db.getSupplierById(id);
+  List<Supplier> getAllSuppliers({String? storeId}) => _db.getAllSuppliers(storeId: storeId);
+
+  Supplier? getSupplierById(String id, {String? storeId}) => _db.getSupplierById(id, storeId: storeId);
 
   Future<void> saveSupplier(Supplier supplier) => _db.saveSupplier(supplier);
 

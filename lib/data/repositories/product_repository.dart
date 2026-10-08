@@ -7,21 +7,23 @@ class ProductRepository {
 
   ProductRepository({DatabaseHelper? db}) : _db = db ?? DatabaseHelper();
 
-  List<Product> getAllProducts() => _db.getAllProducts();
+  String get activeStoreId => _db.activeStoreId;
 
-  Product? getProductById(String id) => _db.getProductById(id);
+  List<Product> getAllProducts({String? storeId}) => _db.getAllProducts(storeId: storeId);
 
-  Product? getProductByBarcode(String barcode) => _db.getProductByBarcode(barcode);
+  Product? getProductById(String id, {String? storeId}) => _db.getProductById(id, storeId: storeId);
 
-  List<Product> getLowStockProducts() => _db.getLowStockProducts();
+  Product? getProductByBarcode(String barcode, {String? storeId}) => _db.getProductByBarcode(barcode, storeId: storeId);
+
+  List<Product> getLowStockProducts({String? storeId}) => _db.getLowStockProducts(storeId: storeId);
 
   Future<void> saveProduct(Product product) => _db.saveProduct(product);
 
-  Future<void> bulkInsertProducts(List<Product> products) => _db.bulkInsertProducts(products);
+  Future<void> bulkInsertProducts(List<Product> products, {String? storeId}) => _db.bulkInsertProducts(products, storeId: storeId);
 
   Future<void> deleteProduct(String id) => _db.deleteProduct(id);
 
-  List<ProductCategory> getAllCategories() => _db.getAllCategories();
+  List<ProductCategory> getAllCategories({String? storeId}) => _db.getAllCategories(storeId: storeId);
 
   Future<void> saveCategory(ProductCategory category) => _db.saveCategory(category);
 }

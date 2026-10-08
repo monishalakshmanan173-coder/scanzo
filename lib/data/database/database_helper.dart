@@ -12,6 +12,7 @@ import '../models/payment.dart';
 import '../models/stock_movement.dart';
 import '../models/invoice.dart';
 import '../models/app_settings.dart';
+import '../models/shop_type.dart';
 import '../../core/constants/app_constants.dart';
 import '../../core/utils/id_generator.dart';
 
@@ -21,6 +22,10 @@ class DatabaseHelper {
   DatabaseHelper._internal();
 
   bool _initialized = false;
+
+  // Multi-store management
+  final Map<String, BusinessProfile> _stores = {};
+  String _activeStoreId = '';
 
   // In-memory collections cached from persistent store
   final Map<String, Product> _products = {};
@@ -42,13 +47,56 @@ class DatabaseHelper {
     try {
       final prefs = await SharedPreferences.getInstance();
 
-      // Load Business Profile
-      final businessJson = prefs.getString(AppConstants.keyActiveBusiness);
-      if (businessJson != null && businessJson.isNotEmpty) {
-        _businessProfile = BusinessProfile.fromMap(jsonDecode(businessJson));
+      // 1. Load Stores
+      final storesStr = prefs.getString('db_stores');
+      if (storesStr != null && storesStr.isNotEmpty) {
+        final List list = jsonDecode(storesStr);
+        for (var item in list) {
+          final profile = BusinessProfile.fromMap(item);
+          _stores[profile.id] = profile;
+        }
       }
 
-      // Load Settings
+      // 2. Load Active Business Profile if existing
+      final businessJson = prefs.getString(AppConstants.keyActiveBusiness);
+      if (businessJson != null && businessJson.isNotEmpty) {
+        final profile = BusinessProfile.fromMap(jsonDecode(businessJson));
+        _stores[profile.id] = profile;
+        _businessProfile = profile;
+      }
+
+      // 3. Resolve activeStoreId
+      _activeStoreId = prefs.getString('active_store_id') ?? '';
+      if (_activeStoreId.isEmpty || !_stores.containsKey(_activeStoreId)) {
+        if (_businessProfile != null) {
+          _activeStoreId = _businessProfile!.id;
+        } else if (_stores.isNotEmpty) {
+          _activeStoreId = _stores.keys.first;
+          _businessProfile = _stores[_activeStoreId];
+        } else {
+          // Initialize default store if none exists
+          _activeStoreId = 'store_retail';
+          final defaultStore = BusinessProfile(
+            id: 'store_retail',
+            businessName: 'SCANZO Retail Store',
+            ownerName: 'Store Owner',
+            mobile: '9876543210',
+            address: 'Main Market Road',
+            city: 'Metro City',
+            state: 'State',
+            pincode: '560001',
+            shopTypeId: 'retail',
+            createdAt: DateTime.now(),
+            updatedAt: DateTime.now(),
+          );
+          _stores[_activeStoreId] = defaultStore;
+          _businessProfile = defaultStore;
+        }
+      } else {
+        _businessProfile = _stores[_activeStoreId];
+      }
+
+      // 4. Load Settings
       final settingsJson = prefs.getString(AppConstants.keyAppSettings);
       if (settingsJson != null && settingsJson.isNotEmpty) {
         _appSettings = AppSettings.fromMap(jsonDecode(settingsJson));
@@ -60,13 +108,19 @@ class DatabaseHelper {
         );
       }
 
-      // Load collections from persistent storage
+      // 5. Load collections from persistent storage
       await _loadCollections(prefs);
+
+      // Ensure active store has categories
+      if (_categories.values.where((c) => c.storeId == _activeStoreId).isEmpty) {
+        _seedCategoriesForStore(_activeStoreId, activeStoreType);
+        await _persistCategories();
+      }
 
       _initialized = true;
     } catch (e) {
       debugPrint('DatabaseHelper init error: $e');
-      _initialized = true; // allow app to continue gracefully
+      _initialized = true;
     }
   }
 
@@ -77,7 +131,8 @@ class DatabaseHelper {
       final List list = jsonDecode(productsStr);
       for (var item in list) {
         final p = Product.fromMap(item);
-        _products[p.id] = p;
+        final sid = p.storeId.isNotEmpty ? p.storeId : _activeStoreId;
+        _products[p.id] = p.copyWith(storeId: sid);
       }
     }
 
@@ -87,11 +142,20 @@ class DatabaseHelper {
       final List list = jsonDecode(categoriesStr);
       for (var item in list) {
         final c = ProductCategory.fromMap(item);
-        _categories[c.id] = c;
+        final sid = c.storeId.isNotEmpty ? c.storeId : _activeStoreId;
+        _categories[c.id] = ProductCategory(
+          id: c.id,
+          storeId: sid,
+          name: c.name,
+          description: c.description,
+          iconName: c.iconName,
+          colorHex: c.colorHex,
+          createdAt: c.createdAt,
+          updatedAt: c.updatedAt,
+        );
       }
     } else {
-      // Default initial standard categories
-      _seedDefaultCategories();
+      _seedCategoriesForStore(_activeStoreId, activeStoreType);
     }
 
     // Customers
@@ -100,7 +164,8 @@ class DatabaseHelper {
       final List list = jsonDecode(customersStr);
       for (var item in list) {
         final c = Customer.fromMap(item);
-        _customers[c.id] = c;
+        final sid = c.storeId.isNotEmpty ? c.storeId : _activeStoreId;
+        _customers[c.id] = c.copyWith(storeId: sid);
       }
     }
 
@@ -110,7 +175,8 @@ class DatabaseHelper {
       final List list = jsonDecode(suppliersStr);
       for (var item in list) {
         final s = Supplier.fromMap(item);
-        _suppliers[s.id] = s;
+        final sid = s.storeId.isNotEmpty ? s.storeId : _activeStoreId;
+        _suppliers[s.id] = s.copyWith(storeId: sid);
       }
     }
 
@@ -131,7 +197,8 @@ class DatabaseHelper {
         final sId = item['id'];
         final items = _saleItems.where((si) => si.saleId == sId).toList();
         final s = Sale.fromMap(item, items);
-        _sales[s.id] = s;
+        final sid = s.storeId.isNotEmpty ? s.storeId : _activeStoreId;
+        _sales[s.id] = s.copyWith(storeId: sid);
       }
     }
 
@@ -151,7 +218,22 @@ class DatabaseHelper {
       final List list = jsonDecode(movementsStr);
       _stockMovements.clear();
       for (var item in list) {
-        _stockMovements.add(StockMovement.fromMap(item));
+        final m = StockMovement.fromMap(item);
+        final sid = m.storeId.isNotEmpty ? m.storeId : _activeStoreId;
+        _stockMovements.add(StockMovement(
+          id: m.id,
+          storeId: sid,
+          productId: m.productId,
+          productName: m.productName,
+          type: m.type,
+          quantityDelta: m.quantityDelta,
+          previousStock: m.previousStock,
+          newStock: m.newStock,
+          referenceId: m.referenceId,
+          reason: m.reason,
+          createdAt: m.createdAt,
+          updatedAt: m.updatedAt,
+        ));
       }
     }
 
@@ -161,7 +243,27 @@ class DatabaseHelper {
       final List list = jsonDecode(invoicesStr);
       for (var item in list) {
         final inv = Invoice.fromMap(item);
-        _invoices[inv.id] = inv;
+        final sid = inv.storeId.isNotEmpty ? inv.storeId : _activeStoreId;
+        _invoices[inv.id] = Invoice(
+          id: inv.id,
+          storeId: sid,
+          invoiceNumber: inv.invoiceNumber,
+          saleId: inv.saleId,
+          customerName: inv.customerName,
+          customerMobile: inv.customerMobile,
+          businessName: inv.businessName,
+          businessGstin: inv.businessGstin,
+          businessAddress: inv.businessAddress,
+          businessMobile: inv.businessMobile,
+          subtotal: inv.subtotal,
+          discount: inv.discount,
+          gst: inv.gst,
+          total: inv.total,
+          paymentMethod: inv.paymentMethod,
+          format: inv.format,
+          createdAt: inv.createdAt,
+          updatedAt: inv.updatedAt,
+        );
       }
     }
 
@@ -169,12 +271,31 @@ class DatabaseHelper {
     _invoiceSequence = prefs.getInt('db_invoice_sequence') ?? _sales.length;
   }
 
-  void _seedDefaultCategories() {
-    final defaultNames = ['General', 'Groceries', 'Beverages', 'Dairy', 'Snacks', 'Bakery', 'Clothing', 'Electronics'];
+  void _seedCategoriesForStore(String storeId, String shopTypeId) {
+    List<String> defaultNames;
+    final type = shopTypeId.toLowerCase();
+
+    if (type == 'electronics') {
+      defaultNames = ['Audio & Headphones', 'Power & Chargers', 'Cables & Adapters', 'Accessories', 'Mobiles & Gadgets', 'Smart Devices'];
+    } else if (type == 'clothing' || type == 'fashion') {
+      defaultNames = ['Menswear', 'Womenswear', 'Dresses & Tops', 'Denim & Jeans', 'Ethnic Wear', 'Fashion Accessories'];
+    } else if (type == 'medical' || type == 'pharmacy') {
+      defaultNames = ['Medicines', 'Vitamins & Wellness', 'First Aid', 'Personal Hygiene', 'Health Devices', 'Skincare'];
+    } else if (type == 'grocery') {
+      defaultNames = ['Dairy & Milk', 'Staples & Grains', 'Edible Oils', 'Spices & Condiments', 'Beverages', 'Packaged Foods'];
+    } else if (type == 'bakery') {
+      defaultNames = ['Cakes & Pastries', 'Fresh Breads', 'Cookies & Biscuits', 'Beverages & Coffee', 'Confectionery', 'Savories'];
+    } else if (type == 'retail') {
+      defaultNames = ['General', 'Foodgrains & Staples', 'Edible Oils', 'Snacks & Biscuits', 'Soaps & Detergents', 'Daily Needs'];
+    } else {
+      defaultNames = ['General Items', 'Supplies', 'Wholesale Goods', 'Hardware & Tools', 'Custom Trade'];
+    }
+
     for (var name in defaultNames) {
-      final id = 'cat_${name.toLowerCase()}';
+      final id = 'cat_${storeId}_${name.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '_')}';
       _categories[id] = ProductCategory(
         id: id,
+        storeId: storeId,
         name: name,
         createdAt: DateTime.now(),
         updatedAt: DateTime.now(),
@@ -183,6 +304,12 @@ class DatabaseHelper {
   }
 
   // --- PERSISTENCE HELPERS ---
+  Future<void> _persistStores() async {
+    final prefs = await SharedPreferences.getInstance();
+    final list = _stores.values.map((s) => s.toMap()).toList();
+    await prefs.setString('db_stores', jsonEncode(list));
+  }
+
   Future<void> _persistProducts() async {
     final prefs = await SharedPreferences.getInstance();
     final list = _products.values.map((p) => p.toMap()).toList();
@@ -224,14 +351,89 @@ class DatabaseHelper {
     await _persistProducts();
   }
 
-  // --- BUSINESS PROFILE ---
-  BusinessProfile? get businessProfile => _businessProfile;
+  // --- STORE CONTEXT & PROFILE MANAGEMENT ---
+  String get activeStoreId => _activeStoreId.isNotEmpty ? _activeStoreId : (_businessProfile?.id ?? 'store_retail');
+  String get activeStoreType => _businessProfile?.shopTypeId ?? 'retail';
+  String get activeStoreName => _businessProfile?.businessName ?? 'SCANZO Store';
+  BusinessProfile? get businessProfile => _stores[activeStoreId] ?? _businessProfile;
 
-  Future<void> saveBusinessProfile(BusinessProfile profile) async {
-    _businessProfile = profile;
+  List<BusinessProfile> getAllStores() {
+    return _stores.values.toList()
+      ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+  }
+
+  BusinessProfile? getStoreById(String storeId) => _stores[storeId];
+
+  Future<void> setActiveStore(String storeId) async {
+    if (_stores.containsKey(storeId)) {
+      _activeStoreId = storeId;
+      _businessProfile = _stores[storeId];
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('active_store_id', storeId);
+      await prefs.setString(AppConstants.keyActiveBusiness, jsonEncode(_businessProfile!.toMap()));
+
+      // Ensure store has categories
+      if (_categories.values.where((c) => c.storeId == storeId).isEmpty) {
+        _seedCategoriesForStore(storeId, _businessProfile!.shopTypeId);
+        await _persistCategories();
+      }
+    }
+  }
+
+  Future<void> saveBusinessProfile(BusinessProfile profile, {bool makeActive = true}) async {
+    _stores[profile.id] = profile;
+    if (makeActive || _activeStoreId.isEmpty) {
+      _activeStoreId = profile.id;
+      _businessProfile = profile;
+    }
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(AppConstants.keyActiveBusiness, jsonEncode(profile.toMap()));
+    await prefs.setString('active_store_id', _activeStoreId);
+    await prefs.setString(AppConstants.keyActiveBusiness, jsonEncode((_businessProfile ?? profile).toMap()));
     await prefs.setBool(AppConstants.keyBusinessSetupCompleted, true);
+    await _persistStores();
+
+    // Ensure category seed
+    if (_categories.values.where((c) => c.storeId == profile.id).isEmpty) {
+      _seedCategoriesForStore(profile.id, profile.shopTypeId);
+      await _persistCategories();
+    }
+  }
+
+  Future<BusinessProfile> createOrGetStoreForShopType(String shopTypeId, {String? storeName}) async {
+    // Check if store with this shop type already exists
+    final cleanType = shopTypeId.toLowerCase();
+    for (var s in _stores.values) {
+      if (s.shopTypeId.toLowerCase() == cleanType) {
+        await setActiveStore(s.id);
+        return s;
+      }
+    }
+
+    // Otherwise create a new store
+    final shopType = ShopType.getById(cleanType);
+    final newStoreId = 'store_${cleanType}_${DateTime.now().millisecondsSinceEpoch % 10000}';
+    final name = storeName ?? 'SCANZO ${shopType.title}';
+
+    final profile = BusinessProfile(
+      id: newStoreId,
+      businessName: name,
+      ownerName: _businessProfile?.ownerName ?? 'Store Owner',
+      mobile: _businessProfile?.mobile ?? '9876543210',
+      email: _businessProfile?.email,
+      address: _businessProfile?.address ?? 'Market Square',
+      city: _businessProfile?.city ?? 'City',
+      state: _businessProfile?.state ?? 'State',
+      pincode: _businessProfile?.pincode ?? '560001',
+      gstin: _businessProfile?.gstin,
+      invoicePrefix: shopType.id.substring(0, 3).toUpperCase(),
+      currency: '₹',
+      shopTypeId: cleanType,
+      createdAt: DateTime.now(),
+      updatedAt: DateTime.now(),
+    );
+
+    await saveBusinessProfile(profile, makeActive: true);
+    return profile;
   }
 
   // --- SETTINGS ---
@@ -249,19 +451,33 @@ class DatabaseHelper {
     await prefs.setString(AppConstants.keyAppSettings, jsonEncode(settings.toMap()));
   }
 
-  // --- PRODUCTS ---
-  List<Product> getAllProducts() {
-    return _products.values.toList()
+  // --- PRODUCTS (FILTERED BY STORE ID) ---
+  List<Product> getAllProducts({String? storeId}) {
+    final sid = storeId ?? activeStoreId;
+    return _products.values
+        .where((p) => p.storeId == sid || (p.storeId.isEmpty && sid == activeStoreId))
+        .toList()
       ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
   }
 
-  Product? getProductById(String id) => _products[id];
+  Product? getProductById(String id, {String? storeId}) {
+    final sid = storeId ?? activeStoreId;
+    final p = _products[id];
+    if (p != null && (p.storeId == sid || (p.storeId.isEmpty && sid == activeStoreId))) {
+      return p;
+    }
+    return null;
+  }
 
-  Product? getProductByBarcode(String barcode) {
+  Product? getProductByBarcode(String barcode, {String? storeId}) {
     if (barcode.trim().isEmpty) return null;
+    final sid = storeId ?? activeStoreId;
+    final cleanBarcode = barcode.trim().toLowerCase();
     try {
       return _products.values.firstWhere(
-        (p) => p.barcode.trim().toLowerCase() == barcode.trim().toLowerCase(),
+        (p) =>
+            (p.storeId == sid || (p.storeId.isEmpty && sid == activeStoreId)) &&
+            p.barcode.trim().toLowerCase() == cleanBarcode,
       );
     } catch (_) {
       return null;
@@ -269,13 +485,17 @@ class DatabaseHelper {
   }
 
   Future<void> saveProduct(Product product) async {
-    _products[product.id] = product;
+    final sid = product.storeId.isNotEmpty ? product.storeId : activeStoreId;
+    final updated = product.copyWith(storeId: sid);
+    _products[updated.id] = updated;
     await _persistProducts();
   }
 
-  Future<void> bulkInsertProducts(List<Product> newProducts) async {
+  Future<void> bulkInsertProducts(List<Product> newProducts, {String? storeId}) async {
+    final sid = storeId ?? activeStoreId;
     for (var p in newProducts) {
-      _products[p.id] = p;
+      final targetSid = p.storeId.isNotEmpty ? p.storeId : sid;
+      _products[p.id] = p.copyWith(storeId: targetSid);
     }
     await _persistProducts();
   }
@@ -285,15 +505,41 @@ class DatabaseHelper {
     await _persistProducts();
   }
 
-  List<Product> getLowStockProducts() {
-    return _products.values.where((p) => p.isLowStock || p.isOutOfStock).toList();
+  List<Product> getLowStockProducts({String? storeId}) {
+    final sid = storeId ?? activeStoreId;
+    return _products.values
+        .where((p) =>
+            (p.storeId == sid || (p.storeId.isEmpty && sid == activeStoreId)) &&
+            (p.isLowStock || p.isOutOfStock))
+        .toList();
   }
 
-  // --- CATEGORIES ---
-  List<ProductCategory> getAllCategories() => _categories.values.toList();
+  // --- CATEGORIES (FILTERED BY STORE ID) ---
+  List<ProductCategory> getAllCategories({String? storeId}) {
+    final sid = storeId ?? activeStoreId;
+    final cats = _categories.values
+        .where((c) => c.storeId == sid || (c.storeId.isEmpty && sid == activeStoreId))
+        .toList();
+    if (cats.isEmpty) {
+      _seedCategoriesForStore(sid, activeStoreType);
+      return _categories.values.where((c) => c.storeId == sid).toList();
+    }
+    return cats;
+  }
 
   Future<void> saveCategory(ProductCategory category) async {
-    _categories[category.id] = category;
+    final sid = category.storeId.isNotEmpty ? category.storeId : activeStoreId;
+    final updated = ProductCategory(
+      id: category.id,
+      storeId: sid,
+      name: category.name,
+      description: category.description,
+      iconName: category.iconName,
+      colorHex: category.colorHex,
+      createdAt: category.createdAt,
+      updatedAt: DateTime.now(),
+    );
+    _categories[updated.id] = updated;
     await _persistCategories();
   }
 
@@ -302,16 +548,28 @@ class DatabaseHelper {
     await _persistCategories();
   }
 
-  // --- CUSTOMERS ---
-  List<Customer> getAllCustomers() {
-    return _customers.values.toList()
+  // --- CUSTOMERS (FILTERED BY STORE ID) ---
+  List<Customer> getAllCustomers({String? storeId}) {
+    final sid = storeId ?? activeStoreId;
+    return _customers.values
+        .where((c) => c.storeId == sid || (c.storeId.isEmpty && sid == activeStoreId))
+        .toList()
       ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
   }
 
-  Customer? getCustomerById(String id) => _customers[id];
+  Customer? getCustomerById(String id, {String? storeId}) {
+    final sid = storeId ?? activeStoreId;
+    final c = _customers[id];
+    if (c != null && (c.storeId == sid || (c.storeId.isEmpty && sid == activeStoreId))) {
+      return c;
+    }
+    return null;
+  }
 
   Future<void> saveCustomer(Customer customer) async {
-    _customers[customer.id] = customer;
+    final sid = customer.storeId.isNotEmpty ? customer.storeId : activeStoreId;
+    final updated = customer.copyWith(storeId: sid);
+    _customers[updated.id] = updated;
     await _persistCustomers();
   }
 
@@ -320,16 +578,28 @@ class DatabaseHelper {
     await _persistCustomers();
   }
 
-  // --- SUPPLIERS ---
-  List<Supplier> getAllSuppliers() {
-    return _suppliers.values.toList()
+  // --- SUPPLIERS (FILTERED BY STORE ID) ---
+  List<Supplier> getAllSuppliers({String? storeId}) {
+    final sid = storeId ?? activeStoreId;
+    return _suppliers.values
+        .where((s) => s.storeId == sid || (s.storeId.isEmpty && sid == activeStoreId))
+        .toList()
       ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
   }
 
-  Supplier? getSupplierById(String id) => _suppliers[id];
+  Supplier? getSupplierById(String id, {String? storeId}) {
+    final sid = storeId ?? activeStoreId;
+    final s = _suppliers[id];
+    if (s != null && (s.storeId == sid || (s.storeId.isEmpty && sid == activeStoreId))) {
+      return s;
+    }
+    return null;
+  }
 
   Future<void> saveSupplier(Supplier supplier) async {
-    _suppliers[supplier.id] = supplier;
+    final sid = supplier.storeId.isNotEmpty ? supplier.storeId : activeStoreId;
+    final updated = supplier.copyWith(storeId: sid);
+    _suppliers[updated.id] = updated;
     await _persistSuppliers();
   }
 
@@ -339,12 +609,13 @@ class DatabaseHelper {
   }
 
   // --- BILLING / TRANSACTIONAL CHECKOUT ---
-  int getNextInvoiceSequence() {
+  int getNextInvoiceSequence({String? storeId}) {
     return _invoiceSequence + 1;
   }
 
-  String generateNextInvoiceNumber() {
-    final prefix = _businessProfile?.invoicePrefix ?? _appSettings?.invoicePrefix ?? AppConstants.defaultInvoicePrefix;
+  String generateNextInvoiceNumber({String? storeId}) {
+    final currentProfile = businessProfile;
+    final prefix = currentProfile?.invoicePrefix ?? _appSettings?.invoicePrefix ?? AppConstants.defaultInvoicePrefix;
     return IdGenerator.generateInvoiceNumber(prefix, getNextInvoiceSequence());
   }
 
@@ -361,18 +632,21 @@ class DatabaseHelper {
     required double paidAmount,
     required double changeAmount,
     String? notes,
+    String? storeId,
   }) async {
     if (items.isEmpty) {
       throw Exception('Cannot process checkout with empty cart.');
     }
 
+    final sid = storeId ?? activeStoreId;
     _invoiceSequence++;
-    final prefix = _businessProfile?.invoicePrefix ?? _appSettings?.invoicePrefix ?? AppConstants.defaultInvoicePrefix;
+    final currentProfile = _stores[sid] ?? businessProfile;
+    final prefix = currentProfile?.invoicePrefix ?? _appSettings?.invoicePrefix ?? AppConstants.defaultInvoicePrefix;
     final invoiceNumber = IdGenerator.generateInvoiceNumber(prefix, _invoiceSequence);
     final saleId = IdGenerator.generateId('sale');
     final now = DateTime.now();
 
-    // 1. Create Sale Items & Deduct Stock
+    // 1. Create Sale Items & Deduct Stock strictly for this store
     final processedItems = <SaleItem>[];
     for (var item in items) {
       final processedItem = SaleItem(
@@ -395,13 +669,14 @@ class DatabaseHelper {
 
       // Stock Deduction and Movement
       final product = _products[item.productId];
-      if (product != null) {
+      if (product != null && (product.storeId == sid || (product.storeId.isEmpty && sid == activeStoreId))) {
         final prevStock = product.currentStock;
         final newStock = prevStock - item.quantity;
         _products[product.id] = product.copyWith(currentStock: newStock);
 
         _stockMovements.add(StockMovement(
           id: IdGenerator.generateId('mov'),
+          storeId: sid,
           productId: product.id,
           productName: product.name,
           type: AppConstants.stockMovementSale,
@@ -416,9 +691,10 @@ class DatabaseHelper {
       }
     }
 
-    // 2. Create Sale
+    // 2. Create Sale with storeId
     final sale = Sale(
       id: saleId,
+      storeId: sid,
       invoiceNumber: invoiceNumber,
       customerId: customerId,
       customerName: customerName,
@@ -449,17 +725,18 @@ class DatabaseHelper {
       updatedAt: now,
     ));
 
-    // 4. Create Invoice
+    // 4. Create Invoice with storeId
     final invoice = Invoice(
       id: IdGenerator.generateId('inv'),
+      storeId: sid,
       invoiceNumber: invoiceNumber,
       saleId: sale.id,
       customerName: customerName,
       customerMobile: customerMobile,
-      businessName: _businessProfile?.businessName ?? 'SCANZO Store',
-      businessGstin: _businessProfile?.gstin,
-      businessAddress: _businessProfile?.address ?? '',
-      businessMobile: _businessProfile?.mobile ?? '',
+      businessName: currentProfile?.businessName ?? 'SCANZO Store',
+      businessGstin: currentProfile?.gstin,
+      businessAddress: currentProfile?.address ?? '',
+      businessMobile: currentProfile?.mobile ?? '',
       subtotal: subtotal,
       discount: totalDiscount,
       gst: totalGst,
@@ -489,14 +766,24 @@ class DatabaseHelper {
     return sale;
   }
 
-  // --- SALES QUERIES ---
-  List<Sale> getAllSales() {
-    final list = _sales.values.toList();
+  // --- SALES QUERIES (FILTERED BY STORE ID) ---
+  List<Sale> getAllSales({String? storeId}) {
+    final sid = storeId ?? activeStoreId;
+    final list = _sales.values
+        .where((s) => s.storeId == sid || (s.storeId.isEmpty && sid == activeStoreId))
+        .toList();
     list.sort((a, b) => b.createdAt.compareTo(a.createdAt));
     return list;
   }
 
-  Sale? getSaleById(String id) => _sales[id];
+  Sale? getSaleById(String id, {String? storeId}) {
+    final sid = storeId ?? activeStoreId;
+    final s = _sales[id];
+    if (s != null && (s.storeId == sid || (s.storeId.isEmpty && sid == activeStoreId))) {
+      return s;
+    }
+    return null;
+  }
 
   Invoice? getInvoiceBySaleId(String saleId) {
     try {
@@ -506,9 +793,13 @@ class DatabaseHelper {
     }
   }
 
-  // --- STOCK MOVEMENTS & ADJUSTMENTS ---
-  List<StockMovement> getAllStockMovements() {
-    return List.from(_stockMovements.reversed);
+  // --- STOCK MOVEMENTS & ADJUSTMENTS (FILTERED BY STORE ID) ---
+  List<StockMovement> getAllStockMovements({String? storeId}) {
+    final sid = storeId ?? activeStoreId;
+    final list = _stockMovements
+        .where((m) => m.storeId == sid || (m.storeId.isEmpty && sid == activeStoreId))
+        .toList();
+    return List.from(list.reversed);
   }
 
   Future<void> recordStockAdjustment({
@@ -516,7 +807,9 @@ class DatabaseHelper {
     required double newStock,
     required String type,
     String? reason,
+    String? storeId,
   }) async {
+    final sid = storeId ?? activeStoreId;
     final product = _products[productId];
     if (product == null) return;
 
@@ -528,6 +821,7 @@ class DatabaseHelper {
 
     _stockMovements.add(StockMovement(
       id: IdGenerator.generateId('adj'),
+      storeId: sid,
       productId: productId,
       productName: product.name,
       type: type,
@@ -545,9 +839,11 @@ class DatabaseHelper {
   // --- BACKUP & RESTORE ---
   String exportFullDatabaseJson() {
     final data = {
-      'version': '1.0.0',
+      'version': '2.0.0',
       'exportedAt': DateTime.now().toIso8601String(),
-      'business': _businessProfile?.toMap(),
+      'activeStoreId': activeStoreId,
+      'stores': _stores.values.map((s) => s.toMap()).toList(),
+      'business': businessProfile?.toMap(),
       'settings': _appSettings?.toMap(),
       'products': _products.values.map((p) => p.toMap()).toList(),
       'categories': _categories.values.map((c) => c.toMap()).toList(),
@@ -566,9 +862,21 @@ class DatabaseHelper {
   Future<void> importFullDatabaseJson(String jsonString) async {
     final Map<String, dynamic> data = jsonDecode(jsonString);
 
+    _stores.clear();
+    if (data['stores'] != null) {
+      for (var item in data['stores']) {
+        final s = BusinessProfile.fromMap(item);
+        _stores[s.id] = s;
+      }
+    }
+
     if (data['business'] != null) {
       _businessProfile = BusinessProfile.fromMap(data['business']);
+      _stores[_businessProfile!.id] = _businessProfile!;
     }
+
+    _activeStoreId = data['activeStoreId'] ?? _businessProfile?.id ?? (_stores.isNotEmpty ? _stores.keys.first : 'store_retail');
+
     if (data['settings'] != null) {
       _appSettings = AppSettings.fromMap(data['settings']);
     }
@@ -647,21 +955,44 @@ class DatabaseHelper {
     _invoiceSequence = data['invoiceSequence'] ?? _sales.length;
 
     // Persist everything
+    await _persistStores();
     await _persistProducts();
     await _persistCategories();
     await _persistCustomers();
     await _persistSuppliers();
     await _persistSalesAndStock();
     if (_businessProfile != null) {
-      await saveBusinessProfile(_businessProfile!);
+      await saveBusinessProfile(_businessProfile!, makeActive: true);
     }
     if (_appSettings != null) {
       await saveAppSettings(_appSettings!);
     }
   }
 
-  // Clear data on reset (not session)
-  Future<void> clearAllBusinessData() async {
+  // Clear data on reset
+  Future<void> clearAllBusinessData({String? storeId}) async {
+    final sid = storeId;
+    if (sid != null) {
+      // Clear data only for specific store
+      _products.removeWhere((_, p) => p.storeId == sid);
+      _customers.removeWhere((_, c) => c.storeId == sid);
+      _suppliers.removeWhere((_, s) => s.storeId == sid);
+      _sales.removeWhere((_, s) => s.storeId == sid);
+      _saleItems.removeWhere((si) => _sales.values.any((s) => s.id == si.saleId && s.storeId == sid));
+      _stockMovements.removeWhere((m) => m.storeId == sid);
+      _invoices.removeWhere((_, inv) => inv.storeId == sid);
+      _categories.removeWhere((_, c) => c.storeId == sid);
+      _seedCategoriesForStore(sid, _stores[sid]?.shopTypeId ?? 'retail');
+
+      await _persistProducts();
+      await _persistCustomers();
+      await _persistSuppliers();
+      await _persistCategories();
+      await _persistSalesAndStock();
+      return;
+    }
+
+    // Clear all
     _products.clear();
     _customers.clear();
     _suppliers.clear();
@@ -682,7 +1013,9 @@ class DatabaseHelper {
     await prefs.remove('db_stock_movements');
     await prefs.remove('db_invoices');
     await prefs.remove('db_invoice_sequence');
-    _seedDefaultCategories();
+
+    _categories.clear();
+    _seedCategoriesForStore(activeStoreId, activeStoreType);
     await _persistCategories();
   }
 }

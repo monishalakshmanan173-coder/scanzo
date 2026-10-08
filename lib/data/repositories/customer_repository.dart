@@ -6,9 +6,11 @@ class CustomerRepository {
 
   CustomerRepository({DatabaseHelper? db}) : _db = db ?? DatabaseHelper();
 
-  List<Customer> getAllCustomers() => _db.getAllCustomers();
+  String get activeStoreId => _db.activeStoreId;
 
-  Customer? getCustomerById(String id) => _db.getCustomerById(id);
+  List<Customer> getAllCustomers({String? storeId}) => _db.getAllCustomers(storeId: storeId);
+
+  Customer? getCustomerById(String id, {String? storeId}) => _db.getCustomerById(id, storeId: storeId);
 
   Future<void> saveCustomer(Customer customer) => _db.saveCustomer(customer);
 

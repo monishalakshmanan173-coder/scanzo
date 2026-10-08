@@ -115,6 +115,9 @@ class _AddEditProductScreenState extends State<AddEditProductScreen> {
 
       final product = Product(
         id: _existingProduct?.id ?? IdGenerator.generateId('prod'),
+        storeId: (_existingProduct != null && _existingProduct!.storeId.isNotEmpty)
+            ? _existingProduct!.storeId
+            : _productRepo.activeStoreId,
         sku: _skuController.text.trim().isNotEmpty ? _skuController.text.trim() : IdGenerator.generateId('sku'),
         barcode: _barcodeController.text.trim(),
         name: _nameController.text.trim(),

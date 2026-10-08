@@ -71,8 +71,10 @@ class ReportRepository {
 
   ReportRepository({DatabaseHelper? db}) : _db = db ?? DatabaseHelper();
 
-  ReportSummary generateReport({DateTime? startDate, DateTime? endDate}) {
-    final allSales = _db.getAllSales();
+  String get activeStoreId => _db.activeStoreId;
+
+  ReportSummary generateReport({String? storeId, DateTime? startDate, DateTime? endDate}) {
+    final allSales = _db.getAllSales(storeId: storeId);
 
     final filteredSales = allSales.where((s) {
       if (startDate != null && s.createdAt.isBefore(startDate)) return false;
@@ -132,7 +134,7 @@ class ReportRepository {
         productStats[item.productId]!['profit'] += itemProfit;
 
         // Category stats lookup
-        final product = _db.getProductById(item.productId);
+        final product = _db.getProductById(item.productId, storeId: storeId);
         final catName = product?.category ?? 'General';
         if (!categoryStats.containsKey(catName)) {
           categoryStats[catName] = {

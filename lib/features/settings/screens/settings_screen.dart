@@ -4,6 +4,7 @@ import '../../../core/constants/app_constants.dart';
 import '../../../core/constants/app_typography.dart';
 import '../../../data/models/business_profile.dart';
 import '../../../data/models/app_settings.dart';
+import '../../../data/models/shop_type.dart';
 import '../../../data/repositories/business_repository.dart';
 import '../../../data/repositories/settings_repository.dart';
 import '../../../data/repositories/auth_repository.dart';
@@ -90,8 +91,271 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
+  void _showStoreSwitcher() {
+    final stores = _businessRepo.getAllStores();
+    final activeId = _businessRepo.activeStoreId;
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) {
+        return Container(
+          decoration: const BoxDecoration(
+            color: AppColors.surfaceWhite,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+          ),
+          padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
+          child: SafeArea(
+            top: false,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Center(
+                  child: Container(
+                    width: 40,
+                    height: 4,
+                    margin: const EdgeInsets.only(bottom: 16),
+                    decoration: BoxDecoration(
+                      color: AppColors.borderLight,
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                ),
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: AppColors.primaryPink,
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: const Icon(Icons.swap_horiz_rounded, color: AppColors.primaryPinkDark, size: 22),
+                    ),
+                    const SizedBox(width: 12),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('Switch Active Store', style: AppTypography.h3.copyWith(fontSize: 18)),
+                        Text('Independent inventory, sales & reports per store', style: AppTypography.caption),
+                      ],
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                ConstrainedBox(
+                  constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.45),
+                  child: ListView.builder(
+                    shrinkWrap: true,
+                    itemCount: stores.length,
+                    itemBuilder: (context, index) {
+                      final store = stores[index];
+                      final isSelected = store.id == activeId;
+                      final type = ShopType.getById(store.shopTypeId);
+
+                      return Container(
+                        margin: const EdgeInsets.only(bottom: 8),
+                        decoration: BoxDecoration(
+                          color: isSelected ? type.pastelColor.withOpacity(0.5) : AppColors.backgroundCream,
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(
+                            color: isSelected ? type.darkColor : AppColors.borderLight,
+                            width: isSelected ? 1.5 : 1.0,
+                          ),
+                        ),
+                        child: ListTile(
+                          leading: Container(
+                            width: 42,
+                            height: 42,
+                            decoration: BoxDecoration(
+                              color: isSelected ? AppColors.surfaceWhite : type.pastelColor,
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Icon(type.icon, color: type.darkColor, size: 22),
+                          ),
+                          title: Text(
+                            store.businessName,
+                            style: AppTypography.bodyMedium.copyWith(
+                              fontWeight: isSelected ? FontWeight.bold : FontWeight.w600,
+                            ),
+                          ),
+                          subtitle: Text(
+                            '${type.title} • Store ID: ${store.id}',
+                            style: AppTypography.caption,
+                          ),
+                          trailing: isSelected
+                              ? Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                  decoration: BoxDecoration(
+                                    color: type.darkColor,
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  child: const Text('Active', style: TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold)),
+                                )
+                              : null,
+                          onTap: () async {
+                            Navigator.pop(ctx);
+                            if (!isSelected) {
+                              await _businessRepo.setActiveStore(store.id);
+                              _loadSettings();
+                              if (mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text('Switched to ${store.businessName} (${type.title})'),
+                                    backgroundColor: AppColors.primaryPinkDark,
+                                    duration: const Duration(seconds: 2),
+                                  ),
+                                );
+                              }
+                            }
+                          },
+                        ),
+                      );
+                    },
+                  ),
+                ),
+                const SizedBox(height: 12),
+                OutlinedButton.icon(
+                  onPressed: () {
+                    Navigator.pop(ctx);
+                    _showCreateStoreDialog();
+                  },
+                  icon: const Icon(Icons.add_business_rounded),
+                  label: const Text('+ Add New Shop / Business Type'),
+                  style: OutlinedButton.styleFrom(
+                    minimumSize: const Size.fromHeight(48),
+                    side: const BorderSide(color: AppColors.primaryPinkDark),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  void _showCreateStoreDialog() {
+    String selectedType = 'clothing';
+    final nameController = TextEditingController(text: 'Fashion Boutique');
+
+    showDialog(
+      context: context,
+      builder: (dialogCtx) => StatefulBuilder(
+        builder: (context, setDialogState) {
+          final currentType = ShopType.getById(selectedType);
+
+          return AlertDialog(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+            title: const Row(
+              children: [
+                Icon(Icons.add_business_rounded, color: AppColors.primaryPinkDark),
+                SizedBox(width: 8),
+                Text('Add New Store', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+              ],
+            ),
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('Select Business Category:', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+                  const SizedBox(height: 8),
+                  DropdownButtonFormField<String>(
+                    value: selectedType,
+                    isExpanded: true,
+                    decoration: InputDecoration(
+                      filled: true,
+                      fillColor: AppColors.surfaceWhite,
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                    ),
+                    items: ShopType.standardShopTypes.map((t) {
+                      return DropdownMenuItem(
+                        value: t.id,
+                        child: Row(
+                          children: [
+                            Icon(t.icon, size: 18, color: t.darkColor),
+                            const SizedBox(width: 8),
+                            Text(t.title, style: const TextStyle(fontSize: 14)),
+                          ],
+                        ),
+                      );
+                    }).toList(),
+                    onChanged: (val) {
+                      if (val != null) {
+                        setDialogState(() {
+                          selectedType = val;
+                          final t = ShopType.getById(val);
+                          nameController.text = '${t.title} Scanzo';
+                        });
+                      }
+                    },
+                  ),
+                  const SizedBox(height: 14),
+                  const Text('Store Name:', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+                  const SizedBox(height: 6),
+                  TextField(
+                    controller: nameController,
+                    decoration: InputDecoration(
+                      filled: true,
+                      fillColor: AppColors.surfaceWhite,
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  Text(
+                    'Category: ${currentType.performanceBadge} • ${currentType.benchmarkTurnover}',
+                    style: TextStyle(fontSize: 12, color: currentType.darkColor, fontWeight: FontWeight.w600),
+                  ),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialogCtx),
+                child: const Text('Cancel'),
+              ),
+              ElevatedButton(
+                onPressed: () async {
+                  final name = nameController.text.trim();
+                  if (name.isEmpty) return;
+                  Navigator.pop(dialogCtx);
+                  final newStore = await _businessRepo.createOrGetStoreForShopType(
+                    selectedType,
+                    storeName: name,
+                  );
+                  await _businessRepo.setActiveStore(newStore.id);
+                  _loadSettings();
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text('Created & switched to $name (${ShopType.getById(selectedType).title})'),
+                        backgroundColor: AppColors.primaryPinkDark,
+                      ),
+                    );
+                  }
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.primaryPinkDark,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                ),
+                child: const Text('Create & Open', style: TextStyle(color: Colors.white)),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    final activeShopType = ShopType.getById(_businessRepo.activeStoreType);
+
     return Scaffold(
       backgroundColor: AppColors.backgroundCream,
       appBar: AppBar(
@@ -108,9 +372,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              color: AppColors.warmCream,
+              color: activeShopType.pastelColor.withOpacity(0.6),
               borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: AppColors.warmCreamDark.withOpacity(0.2)),
+              border: Border.all(color: activeShopType.darkColor.withOpacity(0.3)),
             ),
             child: Row(
               children: [
@@ -121,7 +385,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     color: AppColors.surfaceWhite,
                     borderRadius: BorderRadius.circular(16),
                   ),
-                  child: const Icon(Icons.storefront_rounded, size: 30, color: AppColors.warmCreamDark),
+                  child: Icon(activeShopType.icon, size: 30, color: activeShopType.darkColor),
                 ),
                 const SizedBox(width: 14),
                 Expanded(
@@ -134,8 +398,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       ),
                       const SizedBox(height: 2),
                       Text(
-                        'Owner: ${_business?.ownerName ?? 'Owner'} • ${_business?.mobile ?? ''}',
-                        style: AppTypography.caption,
+                        '${activeShopType.title} • ${_business?.mobile ?? ''}',
+                        style: AppTypography.caption.copyWith(fontWeight: FontWeight.w600, color: activeShopType.darkColor),
                       ),
                       if (_business?.gstin != null)
                         Text('GSTIN: ${_business!.gstin}', style: AppTypography.caption.copyWith(fontWeight: FontWeight.bold)),
@@ -143,7 +407,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   ),
                 ),
                 IconButton(
-                  icon: const Icon(Icons.edit_outlined, color: AppColors.warmCreamDark),
+                  icon: Icon(Icons.edit_outlined, color: activeShopType.darkColor),
                   tooltip: 'Edit Store Details',
                   onPressed: () => Navigator.pushNamed(context, AppRoutes.businessDetails).then((_) => _loadSettings()),
                 ),
@@ -151,6 +415,28 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
           ),
           const SizedBox(height: 16),
+
+          // Settings Section: Multi-Store Management
+          _buildSettingsGroup(
+            title: 'Store & Shop Type Management',
+            items: [
+              _buildSettingTile(
+                icon: Icons.swap_horiz_rounded,
+                iconColor: AppColors.primaryPinkDark,
+                title: 'Switch Active Store',
+                subtitle: '${_business?.businessName ?? 'Current Shop'} (${activeShopType.title})',
+                onTap: _showStoreSwitcher,
+              ),
+              _buildSettingTile(
+                icon: Icons.add_business_rounded,
+                iconColor: AppColors.mintGreenDark,
+                title: 'Add Another Shop / Category',
+                subtitle: 'Retail, Pharmacy, Electronics, Fashion, Grocery & more',
+                onTap: _showCreateStoreDialog,
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
 
           // Settings Section: Preferences
           _buildSettingsGroup(

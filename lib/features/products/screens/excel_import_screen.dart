@@ -10,6 +10,7 @@ import '../../../shared/widgets/empty_state_view.dart';
 import '../../../shared/widgets/status_badge.dart';
 import '../../../data/repositories/product_repository.dart';
 import '../../../data/services/excel_import_service.dart';
+import '../../../data/database/database_helper.dart';
 
 class ExcelImportScreen extends StatefulWidget {
   const ExcelImportScreen({super.key});
@@ -60,11 +61,13 @@ class _ExcelImportScreenState extends State<ExcelImportScreen> with SingleTicker
           throw Exception('Unable to read file content. Please try another file.');
         }
 
-        final existing = _productRepo.getAllProducts();
+        final currentStoreId = _productRepo.activeStoreId;
+        final existing = _productRepo.getAllProducts(storeId: currentStoreId);
         final analysis = ExcelImportService.parseAndAnalyze(
           bytes: bytes,
           fileName: file.name,
           existingProducts: existing,
+          storeId: currentStoreId,
         );
 
         setState(() {
@@ -80,27 +83,31 @@ class _ExcelImportScreenState extends State<ExcelImportScreen> with SingleTicker
   }
 
   void _loadSampleData() {
-    final sampleCsv = ExcelImportService.generateSampleCsv();
+    final currentStoreId = _productRepo.activeStoreId;
+    final currentStoreType = DatabaseHelper().activeStoreType;
+    final sampleCsv = ExcelImportService.generateSampleCsv(currentStoreType);
     final bytes = utf8.encode(sampleCsv);
-    final existing = _productRepo.getAllProducts();
+    final existing = _productRepo.getAllProducts(storeId: currentStoreId);
 
     final analysis = ExcelImportService.parseAndAnalyze(
       bytes: Uint8List.fromList(bytes),
-      fileName: 'scanzo_sample_products.csv',
+      fileName: 'scanzo_${currentStoreType}_sample.csv',
       existingProducts: existing,
+      storeId: currentStoreId,
     );
 
     setState(() {
-      _selectedFileName = 'scanzo_sample_products.csv';
+      _selectedFileName = 'scanzo_${currentStoreType}_sample.csv';
       _analysis = analysis;
     });
   }
 
   void _copySampleCsv() {
-    final sample = ExcelImportService.generateSampleCsv();
+    final currentStoreType = DatabaseHelper().activeStoreType;
+    final sample = ExcelImportService.generateSampleCsv(currentStoreType);
     Clipboard.setData(ClipboardData(text: sample));
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Sample CSV template copied to clipboard!')),
+      SnackBar(content: Text('Sample CSV for ${DatabaseHelper().activeStoreName} copied to clipboard!')),
     );
   }
 
@@ -109,12 +116,13 @@ class _ExcelImportScreenState extends State<ExcelImportScreen> with SingleTicker
 
     setState(() => _isImporting = true);
     try {
+      final currentStoreId = _productRepo.activeStoreId;
       final validProducts = _analysis!.validRows
           .where((r) => r.product != null)
-          .map((r) => r.product!)
+          .map((r) => r.product!.copyWith(storeId: currentStoreId))
           .toList();
 
-      await _productRepo.bulkInsertProducts(validProducts);
+      await _productRepo.bulkInsertProducts(validProducts, storeId: currentStoreId);
 
       if (!mounted) return;
 
@@ -135,12 +143,13 @@ class _ExcelImportScreenState extends State<ExcelImportScreen> with SingleTicker
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              _buildSummaryRow('Target Store:', DatabaseHelper().activeStoreName),
               _buildSummaryRow('Total Rows in File:', '${_analysis!.totalRows}'),
               _buildSummaryRow('Successfully Imported:', '${validProducts.length}', AppColors.success),
               _buildSummaryRow('Invalid / Missing Fields:', '${_analysis!.invalidRows.length}', AppColors.error),
               _buildSummaryRow('Duplicates Skipped:', '${_analysis!.duplicateRows.length}', AppColors.warning),
               const SizedBox(height: 12),
-              const Text('All valid products have been safely added to your inventory store.'),
+              Text('All valid products have been safely added to ${DatabaseHelper().activeStoreName}.'),
             ],
           ),
           actions: [
@@ -177,6 +186,9 @@ class _ExcelImportScreenState extends State<ExcelImportScreen> with SingleTicker
 
   @override
   Widget build(BuildContext context) {
+    final activeStoreName = DatabaseHelper().activeStoreName;
+    final activeStoreType = DatabaseHelper().activeStoreType.toUpperCase();
+
     return Scaffold(
       backgroundColor: AppColors.backgroundCream,
       appBar: AppBar(
@@ -195,6 +207,32 @@ class _ExcelImportScreenState extends State<ExcelImportScreen> with SingleTicker
       ),
       body: Column(
         children: [
+          // Current Store Indicator
+          Container(
+            width: double.infinity,
+            margin: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+            decoration: BoxDecoration(
+              color: AppColors.softPeach,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: AppColors.softPeachDark.withOpacity(0.3)),
+            ),
+            child: Row(
+              children: [
+                const Icon(Icons.storefront_rounded, size: 18, color: AppColors.softPeachDark),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Target Store: $activeStoreName ($activeStoreType)',
+                    style: AppTypography.caption.copyWith(fontWeight: FontWeight.w700, color: AppColors.textPrimary),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+            ),
+          ),
+
           // Top Action Card: File Picker & Sample Loader
           Container(
             padding: const EdgeInsets.all(16),
