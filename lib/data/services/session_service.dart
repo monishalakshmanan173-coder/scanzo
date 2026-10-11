@@ -29,6 +29,8 @@ class SessionService {
       } catch (e) {
         _currentUser = null;
       }
+    } else {
+      _currentUser = null;
     }
   }
 

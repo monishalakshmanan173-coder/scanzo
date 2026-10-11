@@ -14,7 +14,13 @@ class CloudSyncService {
 
   /// Normalized mobile number key for registry lookups
   static String _normalizeMobile(String mobile) {
-    return mobile.replaceAll(RegExp(r'\D'), '').replaceFirst(RegExp(r'^91'), '');
+    String cleaned = mobile.replaceAll(RegExp(r'\D'), '');
+    if (cleaned.startsWith('91') && cleaned.length == 12) {
+      cleaned = cleaned.substring(2);
+    } else if (cleaned.startsWith('0') && cleaned.length == 11) {
+      cleaned = cleaned.substring(1);
+    }
+    return cleaned;
   }
 
   /// Checks if an account exists for the given 10-digit mobile number.
@@ -91,6 +97,69 @@ class CloudSyncService {
     await prefs.setString('cloud_account_registry', jsonEncode(registry));
     await prefs.setString('account_registered_$clean', uid);
     await prefs.setString('account_profile_$uid', jsonEncode(accountData));
+  }
+
+  /// Pre-registers a pending account before OTP dispatch
+  Future<void> preRegisterPendingAccount({
+    required String mobile,
+    required String ownerName,
+    required String businessName,
+    String? email,
+    String? businessType,
+  }) async {
+    final clean = _normalizeMobile(mobile);
+    final prefs = await SharedPreferences.getInstance();
+    final pendingData = {
+      'mobile': clean,
+      'ownerName': ownerName,
+      'businessName': businessName,
+      'email': email,
+      'businessType': businessType,
+      'createdAt': DateTime.now().toIso8601String(),
+    };
+    await prefs.setString('pending_account_$clean', jsonEncode(pendingData));
+  }
+
+  /// Retrieves the UID registered for this mobile number
+  Future<String?> getUidForMobile(String mobile) async {
+    final clean = _normalizeMobile(mobile);
+    final prefs = await SharedPreferences.getInstance();
+    final uid = prefs.getString('account_registered_$clean');
+    if (uid != null && uid.isNotEmpty) return uid;
+
+    final registryJson = prefs.getString('cloud_account_registry');
+    if (registryJson != null && registryJson.isNotEmpty) {
+      try {
+        final Map<String, dynamic> registry = jsonDecode(registryJson);
+        if (registry.containsKey(clean) && registry[clean] is Map) {
+          return registry[clean]['uid'] as String?;
+        }
+      } catch (_) {}
+    }
+    return null;
+  }
+
+  /// Retrieves account profile directly by mobile number
+  Future<Map<String, dynamic>?> getAccountProfileByMobile(String mobile) async {
+    final clean = _normalizeMobile(mobile);
+    final prefs = await SharedPreferences.getInstance();
+    final registryJson = prefs.getString('cloud_account_registry');
+    if (registryJson != null && registryJson.isNotEmpty) {
+      try {
+        final Map<String, dynamic> registry = jsonDecode(registryJson);
+        if (registry.containsKey(clean) && registry[clean] is Map) {
+          return registry[clean] as Map<String, dynamic>;
+        }
+      } catch (_) {}
+    }
+
+    final pendingJson = prefs.getString('pending_account_$clean');
+    if (pendingJson != null && pendingJson.isNotEmpty) {
+      try {
+        return jsonDecode(pendingJson) as Map<String, dynamic>;
+      } catch (_) {}
+    }
+    return null;
   }
 
   /// Checks if a business profile exists for this Firebase UID.

@@ -39,6 +39,17 @@ class _LoginScreenState extends State<LoginScreen> {
     setState(() => _isLoading = true);
     try {
       final mobile = _mobileController.text.trim();
+
+      // 1. Check whether the account exists BEFORE sending OTP
+      final exists = await _authRepo.checkAccountExists(mobile);
+      if (!exists) {
+        setState(() {
+          _errorMessage = 'Account not found. Please create an account first.';
+        });
+        return;
+      }
+
+      // 2. User exists: send OTP and navigate to OTP screen
       final sentVerificationId = await _authRepo.sendOtp(
         mobile,
         isNewAccount: false,

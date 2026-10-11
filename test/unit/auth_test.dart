@@ -1,9 +1,9 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:scanzo/core/constants/app_constants.dart';
 import 'package:scanzo/core/errors/app_exceptions.dart';
 import 'package:scanzo/data/services/session_service.dart';
 import 'package:scanzo/data/services/cloud_sync_service.dart';
+import 'package:scanzo/data/services/otp_service.dart';
 import 'package:scanzo/data/repositories/auth_repository.dart';
 import 'package:scanzo/data/database/database_helper.dart';
 import 'package:scanzo/data/models/product.dart';
@@ -12,24 +12,32 @@ import 'package:scanzo/data/models/sale_item.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  group('AuthRepository, Firebase UID & Permanent Persistence Tests', () {
+  group('Scanzo Authentication Flow Tests - All Cases & Security Requirements', () {
     late SessionService sessionService;
     late CloudSyncService cloudSync;
+    late OtpService otpService;
     late AuthRepository authRepo;
     late DatabaseHelper db;
 
     setUp(() async {
       SharedPreferences.setMockInitialValues({});
       sessionService = SessionService();
+      await sessionService.logout();
       await sessionService.init();
       cloudSync = CloudSyncService();
-      authRepo = AuthRepository(sessionService: sessionService, cloudSync: cloudSync);
+      otpService = OtpService();
+      otpService.clearSessionsForTesting();
+      authRepo = AuthRepository(
+        sessionService: sessionService,
+        cloudSync: cloudSync,
+        otpService: otpService,
+      );
       db = DatabaseHelper();
       await db.init();
       await db.clearAllBusinessData();
     });
 
-    test('Send OTP validates 10-digit mobile number', () async {
+    test('Mobile validation: Send OTP validates 10-digit mobile number format', () async {
       expect(
         () => authRepo.sendOtp('123', isNewAccount: true),
         throwsA(isA<ValidationException>()),
@@ -41,78 +49,245 @@ void main() {
       await expectLater(authRepo.sendOtp('9876543210', isNewAccount: true), completes);
     });
 
-    test('Login for non-existent account allows OTP send and rejects on verify', () async {
-      const mobile = '9111222333';
-      // Any legitimate mobile number can start Firebase Phone Auth flow
-      await expectLater(authRepo.sendOtp(mobile, isNewAccount: false), completes);
+    test('CASE 1: New/unregistered phone number -> Login -> Account not found -> No OTP sent', () async {
+      const unregisteredMobile = '9111222333';
 
-      // Verify OTP directly for Login must reject non-existent account
+      // 1. Check account exists must return false
+      final exists = await authRepo.checkAccountExists(unregisteredMobile);
+      expect(exists, false);
+
+      // 2. Login sendOtp must throw 'Account not found. Please create an account first.'
       expect(
-        () => authRepo.verifyOtpAndLogin(
-          mobile: mobile,
-          otp: AppConstants.devTestOtp,
-          isNewAccount: false,
-        ),
+        () => authRepo.sendOtp(unregisteredMobile, isNewAccount: false),
         throwsA(predicate((e) =>
-            e is AuthException && e.message.contains('Account not found. Please create an account first.'))),
+            e is AuthException && e.message == 'Account not found. Please create an account first.')),
       );
+
+      // 3. Must remain logged out and no OTP dispatched
+      expect(authRepo.isLoggedIn, false);
+      expect(authRepo.currentUser, null);
     });
 
-    test('Create Account registers user permanently and enables subsequent Login', () async {
+    test('CASE 2: Registered phone number -> Login -> OTP sent -> Correct OTP -> Dashboard', () async {
       const mobile = '9876543210';
 
-      // 1. Send OTP for new account succeeds
-      await expectLater(authRepo.sendOtp(mobile, isNewAccount: true), completes);
-
-      // 2. Verify OTP and complete Create Account
-      final session = await authRepo.verifyOtpAndLogin(
+      // 1. Register the account first
+      await authRepo.preRegisterAccount(
         mobile: mobile,
-        otp: AppConstants.devTestOtp,
+        ownerName: 'Sunil Verma',
+        businessName: 'Verma Supermarket',
+      );
+      final regVerId = await authRepo.sendOtp(mobile, isNewAccount: true);
+      final regOtp = authRepo.otpService.getGeneratedOtpForTesting(regVerId)!;
+      await authRepo.verifyOtpAndLogin(
+        mobile: mobile,
+        otp: regOtp,
         isNewAccount: true,
-        ownerName: 'Ramesh Patel',
-        businessName: 'Patel Electronics',
-        businessType: 'electronics',
+        ownerName: 'Sunil Verma',
+        businessName: 'Verma Supermarket',
       );
-
-      expect(session.mobile, mobile);
-      expect(session.ownerName, 'Ramesh Patel');
-      expect(session.businessName, 'Patel Electronics');
-      expect(authRepo.isLoggedIn, true);
-      expect(await cloudSync.isAccountRegistered(mobile), true);
-
-      // 3. Duplicate Create Account with same number must be rejected on verify
-      await expectLater(authRepo.sendOtp(mobile, isNewAccount: true), completes);
-      expect(
-        () => authRepo.verifyOtpAndLogin(
-          mobile: mobile,
-          otp: AppConstants.devTestOtp,
-          isNewAccount: true,
-        ),
-        throwsA(predicate((e) =>
-            e is AuthException && e.message.contains('An account already exists for this number'))),
-      );
-
-      // 4. Logout
       await authRepo.logout();
       expect(authRepo.isLoggedIn, false);
 
-      // 5. Subsequent Login with existing number now succeeds
-      await expectLater(authRepo.sendOtp(mobile, isNewAccount: false), completes);
-      final loginSession = await authRepo.verifyOtpAndLogin(
+      // 2. Account exists check for login
+      final exists = await authRepo.checkAccountExists(mobile);
+      expect(exists, true);
+
+      // 3. Send OTP for Login succeeds
+      final loginVerId = await authRepo.sendOtp(mobile, isNewAccount: false);
+      expect(loginVerId.isNotEmpty, true);
+
+      // 4. Dynamic OTP is generated
+      final dynamicOtp = authRepo.otpService.getGeneratedOtpForTesting(loginVerId);
+      expect(dynamicOtp != null && dynamicOtp.length == 6, true);
+
+      // 5. Verifying with correct OTP establishes session
+      final session = await authRepo.verifyOtpAndLogin(
         mobile: mobile,
-        otp: AppConstants.devTestOtp,
+        otp: dynamicOtp!,
         isNewAccount: false,
       );
-      expect(loginSession.mobile, mobile);
+
+      expect(authRepo.isLoggedIn, true);
+      expect(session.mobile, mobile);
+      expect(session.ownerName, 'Sunil Verma');
+      expect(session.businessName, 'Verma Supermarket');
+    });
+
+    test('CASE 3: Create Account -> Account created -> OTP sent -> Correct OTP -> Dashboard', () async {
+      const mobile = '9988776655';
+
+      // 1. Account does not exist yet
+      expect(await authRepo.checkAccountExists(mobile), false);
+
+      // 2. Pre-register account details
+      await authRepo.preRegisterAccount(
+        mobile: mobile,
+        ownerName: 'Priya Sharma',
+        businessName: 'Priya Boutique',
+        email: 'priya@boutique.com',
+        businessType: 'apparel',
+      );
+
+      // 3. Send OTP for new account
+      final verId = await authRepo.sendOtp(mobile, isNewAccount: true);
+      expect(verId.isNotEmpty, true);
+
+      final dynamicOtp = authRepo.otpService.getGeneratedOtpForTesting(verId)!;
+      expect(dynamicOtp.length, 6);
+
+      // 4. Complete verification
+      final session = await authRepo.verifyOtpAndLogin(
+        mobile: mobile,
+        otp: dynamicOtp,
+        isNewAccount: true,
+        ownerName: 'Priya Sharma',
+        businessName: 'Priya Boutique',
+        email: 'priya@boutique.com',
+        businessType: 'apparel',
+      );
+
+      expect(authRepo.isLoggedIn, true);
+      expect(session.mobile, mobile);
+      expect(session.ownerName, 'Priya Sharma');
+      expect(session.businessName, 'Priya Boutique');
+      expect(await authRepo.checkAccountExists(mobile), true);
+
+      // 5. Subsequent attempt to create account with same number must fail
+      expect(
+        () => authRepo.sendOtp(mobile, isNewAccount: true),
+        throwsA(predicate((e) =>
+            e is AuthException && e.message.contains('An account already exists for this number'))),
+      );
+    });
+
+    test('CASE 4: Wrong OTP -> Show invalid OTP error -> Do not login', () async {
+      const mobile = '9555444333';
+
+      final verId = await authRepo.sendOtp(mobile, isNewAccount: true);
+      final realOtp = authRepo.otpService.getGeneratedOtpForTesting(verId)!;
+
+      // Provide a deliberately wrong OTP code
+      final wrongOtp = realOtp == '111111' ? '222222' : '111111';
+
+      expect(
+        () => authRepo.verifyOtpAndLogin(
+          mobile: mobile,
+          otp: wrongOtp,
+          isNewAccount: true,
+        ),
+        throwsA(predicate((e) =>
+            e is AuthException && e.message == 'Invalid OTP. Please check the code and try again.')),
+      );
+
+      // User remains logged out
+      expect(authRepo.isLoggedIn, false);
+    });
+
+    test('CASE 5: Expired OTP -> Show expired OTP error -> Allow resend', () async {
+      const mobile = '9444333222';
+
+      final verId = await authRepo.sendOtp(mobile, isNewAccount: true);
+      final otp = authRepo.otpService.getGeneratedOtpForTesting(verId)!;
+
+      // Simulate expiration (beyond 5 minutes)
+      authRepo.otpService.expireSessionForTesting(verId);
+
+      expect(
+        () => authRepo.verifyOtpAndLogin(
+          mobile: mobile,
+          otp: otp,
+          isNewAccount: true,
+        ),
+        throwsA(predicate((e) =>
+            e is AuthException && e.message == 'OTP expired. Please request a new OTP.')),
+      );
+
+      expect(authRepo.isLoggedIn, false);
+    });
+
+    test('CASE 6: Resend OTP -> Cooldown works -> New OTP is generated and sent', () async {
+      const mobile = '9333222111';
+
+      // 1. Initial send
+      final verId1 = await authRepo.sendOtp(mobile, isNewAccount: true);
+      final otp1 = authRepo.otpService.getGeneratedOtpForTesting(verId1)!;
+
+      // 2. Rapid repeated request within 30-second cooldown must throw rate limit
+      await expectLater(
+        authRepo.sendOtp(mobile, isNewAccount: true),
+        throwsA(predicate((e) =>
+            e is AuthException && e.message == 'Too many attempts. Please wait and try again.')),
+      );
+
+      // 3. Clear cooldown and trigger Resend (with forceResend)
+      otpService.clearSessionsForTesting();
+      final verId2 = await authRepo.sendOtp(mobile, isNewAccount: true, forceResend: true);
+      final otp2 = authRepo.otpService.getGeneratedOtpForTesting(verId2)!;
+
+      expect(verId2.isNotEmpty, true);
+      // New verification token issued
+      expect(verId2 != verId1, true);
+
+      // 4. Old OTP must fail
+      if (otp1 != otp2) {
+        expect(
+          () => authRepo.verifyOtpAndLogin(
+            mobile: mobile,
+            otp: otp1,
+            isNewAccount: true,
+          ),
+          throwsA(isA<AuthException>()),
+        );
+      }
+
+      // 5. New OTP succeeds
+      final session = await authRepo.verifyOtpAndLogin(
+        mobile: mobile,
+        otp: otp2,
+        isNewAccount: true,
+      );
+      expect(authRepo.isLoggedIn, true);
+      expect(session.mobile, mobile);
+    });
+
+    test('OTP Security: Static/Fake OTPs (e.g. 123456, 999999) are rejected if not matching dynamic code', () async {
+      const mobile = '9222111000';
+
+      final verId = await authRepo.sendOtp(mobile, isNewAccount: true);
+      final dynamicOtp = authRepo.otpService.getGeneratedOtpForTesting(verId)!;
+
+      // If dynamic OTP is not '123456', attempting '123456' must be rejected
+      if (dynamicOtp != '123456') {
+        expect(
+          () => authRepo.verifyOtpAndLogin(
+            mobile: mobile,
+            otp: '123456',
+            isNewAccount: true,
+          ),
+          throwsA(predicate((e) =>
+              e is AuthException && e.message == 'Invalid OTP. Please check the code and try again.')),
+        );
+      }
+
+      // Only the real dynamic OTP succeeds
+      final session = await authRepo.verifyOtpAndLogin(
+        mobile: mobile,
+        otp: dynamicOtp,
+        isNewAccount: true,
+      );
+      expect(session.mobile, mobile);
       expect(authRepo.isLoggedIn, true);
     });
 
     test('User Data Isolation: User A cannot see User B stores, products, or sales', () async {
       // Create User A
       const mobileA = '9000000001';
+      final verIdA = await authRepo.sendOtp(mobileA, isNewAccount: true);
+      final otpA = authRepo.otpService.getGeneratedOtpForTesting(verIdA)!;
       final sessionA = await authRepo.verifyOtpAndLogin(
         mobile: mobileA,
-        otp: AppConstants.devTestOtp,
+        otp: otpA,
         isNewAccount: true,
         ownerName: 'User Alpha',
         businessName: 'Alpha Store',
@@ -143,9 +318,11 @@ void main() {
 
       // Create User B
       const mobileB = '9000000002';
+      final verIdB = await authRepo.sendOtp(mobileB, isNewAccount: true);
+      final otpB = authRepo.otpService.getGeneratedOtpForTesting(verIdB)!;
       final sessionB = await authRepo.verifyOtpAndLogin(
         mobile: mobileB,
-        otp: AppConstants.devTestOtp,
+        otp: otpB,
         isNewAccount: true,
         ownerName: 'User Beta',
         businessName: 'Beta Pharmacy',
@@ -153,7 +330,7 @@ void main() {
       final uidB = sessionB.id;
       await db.setActiveUserId(uidB);
 
-      // Verify User B sees 0 products from User A!
+      // Verify User B sees 0 products from User A
       expect(db.getAllProducts().length, 0);
 
       // Add product for User B
@@ -174,7 +351,7 @@ void main() {
       expect(db.getAllProducts().length, 1);
       expect(db.getAllProducts().first.name, 'Beta Medicine');
 
-      // Switch back to User A -> User A sees their product, not User B's!
+      // Switch back to User A -> User A sees their product, not User B's
       await db.setActiveUserId(uidA);
       final userAProducts = db.getAllProducts();
       expect(userAProducts.length, 1);
@@ -185,9 +362,11 @@ void main() {
       const mobile = '9888877776';
 
       // 1. Create account & store setup
+      final verId = await authRepo.sendOtp(mobile, isNewAccount: true);
+      final otp = authRepo.otpService.getGeneratedOtpForTesting(verId)!;
       final session = await authRepo.verifyOtpAndLogin(
         mobile: mobile,
-        otp: AppConstants.devTestOtp,
+        otp: otp,
         isNewAccount: true,
         ownerName: 'Kavita Singh',
         businessName: 'Kavita Organics',
@@ -242,24 +421,26 @@ void main() {
       // 4. User logs out
       await authRepo.logout();
 
-      // 5. Simulate App Uninstall & Reinstall (clear in-memory and local database partitions)
+      // 5. Simulate App Uninstall & Reinstall
       await db.setActiveUserId('');
       final prefs = await SharedPreferences.getInstance();
       await prefs.remove('db_${uid}_stores');
       await prefs.remove('db_${uid}_products');
       await prefs.remove('db_${uid}_sales');
 
-      // 6. User re-opens app and logs in with SAME phone number
-      await expectLater(authRepo.sendOtp(mobile, isNewAccount: false), completes);
+      // 6. User logs in with SAME phone number
+      expect(await authRepo.checkAccountExists(mobile), true);
+      final loginVerId = await authRepo.sendOtp(mobile, isNewAccount: false);
+      final loginOtp = authRepo.otpService.getGeneratedOtpForTesting(loginVerId)!;
+
       await authRepo.verifyOtpAndLogin(
         mobile: mobile,
-        otp: AppConstants.devTestOtp,
+        otp: loginOtp,
         isNewAccount: false,
       );
 
-      // 7. Verify session and store data are restored from cloud backup!
+      // 7. Verify session and store data are restored
       await db.setActiveUserId(uid);
-
       final restoredProducts = db.getAllProducts();
       final restoredSales = db.getAllSales();
 
@@ -268,13 +449,6 @@ void main() {
       expect(restoredSales.length, 1);
       expect(restoredSales.first.customerName, 'Customer Sunita');
       expect(restoredSales.first.grandTotal, 480.0);
-    });
-
-    test('Verify OTP with invalid code throws human-friendly AuthException', () async {
-      expect(
-        () => authRepo.verifyOtpAndLogin(mobile: '9876543210', otp: '000000', isNewAccount: true),
-        throwsA(predicate((e) => e is AuthException && e.message.contains('Invalid OTP'))),
-      );
     });
   });
 }

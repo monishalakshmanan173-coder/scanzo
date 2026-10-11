@@ -96,21 +96,21 @@ class _OtpScreenState extends State<OtpScreen> {
       await Future.delayed(const Duration(milliseconds: 600));
       if (!mounted) return;
 
-      if (isNewAccount) {
-        // Go to shop type setup / business profile for new account
-        Navigator.pushNamedAndRemoveUntil(context, AppRoutes.shopType, (r) => false);
+      final hasStores = DatabaseHelper().getAllStores().isNotEmpty;
+      if (hasStores) {
+        Navigator.pushNamedAndRemoveUntil(context, AppRoutes.dashboard, (r) => false);
       } else {
-        // Direct to Dashboard for existing user with their restored data, or shopType if first store needed
-        final hasStores = DatabaseHelper().getAllStores().isNotEmpty;
-        if (hasStores) {
-          Navigator.pushNamedAndRemoveUntil(context, AppRoutes.dashboard, (r) => false);
-        } else {
-          Navigator.pushNamedAndRemoveUntil(context, AppRoutes.shopType, (r) => false);
-        }
+        Navigator.pushNamedAndRemoveUntil(context, AppRoutes.shopType, (r) => false);
       }
     } catch (e) {
       final msg = e.toString().replaceFirst(RegExp(r'^(Exception|AuthException|ValidationException):\s*'), '');
       setState(() => _errorMessage = msg);
+      for (var c in _controllers) {
+        c.clear();
+      }
+      if (_focusNodes.isNotEmpty) {
+        _focusNodes[0].requestFocus();
+      }
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -185,9 +185,12 @@ class _OtpScreenState extends State<OtpScreen> {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Text(
-                        'Sent 6-digit code to +91 $mobile',
-                        style: AppTypography.bodySmall,
+                      Flexible(
+                        child: Text(
+                          'Sent 6-digit code to +91 $mobile',
+                          style: AppTypography.bodySmall,
+                          overflow: TextOverflow.ellipsis,
+                        ),
                       ),
                       const SizedBox(width: 6),
                       GestureDetector(
@@ -320,15 +323,22 @@ class _OtpScreenState extends State<OtpScreen> {
                       if (_resendTimer == 0)
                         GestureDetector(
                           onTap: () async {
-                            _startResendTimer();
                             setState(() => _errorMessage = null);
                             try {
                               final isNew = widget.arguments['isNewAccount'] ?? false;
                               final newVerId = await _authRepo.sendOtp(
                                 mobile,
                                 isNewAccount: isNew,
+                                forceResend: true,
                               );
                               widget.arguments['verificationId'] = newVerId;
+                              for (var c in _controllers) {
+                                c.clear();
+                              }
+                              if (_focusNodes.isNotEmpty) {
+                                _focusNodes[0].requestFocus();
+                              }
+                              _startResendTimer();
                               if (mounted) {
                                 ScaffoldMessenger.of(context).showSnackBar(
                                   const SnackBar(

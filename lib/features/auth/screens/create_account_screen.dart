@@ -26,7 +26,7 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
   final _emailController = TextEditingController();
   final _authRepo = AuthRepository();
 
-  String _selectedBusinessType = 'Retail Shop';
+  String _selectedBusinessType = 'Retail Store';
   bool _isLoading = false;
   String? _errorMessage;
 
@@ -46,6 +46,29 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
     setState(() => _isLoading = true);
     try {
       final mobile = _mobileController.text.trim();
+      final ownerName = _ownerNameController.text.trim();
+      final businessName = _businessNameController.text.trim();
+      final email = _emailController.text.trim();
+
+      // 1. Check whether account already exists for this number
+      final exists = await _authRepo.checkAccountExists(mobile);
+      if (exists) {
+        setState(() {
+          _errorMessage = 'An account already exists for this number. Please log in instead.';
+        });
+        return;
+      }
+
+      // 2. Pre-register account details
+      await _authRepo.preRegisterAccount(
+        mobile: mobile,
+        ownerName: ownerName,
+        businessName: businessName,
+        email: email.isNotEmpty ? email : null,
+        businessType: _selectedBusinessType,
+      );
+
+      // 3. Send OTP for new account
       final sentVerificationId = await _authRepo.sendOtp(
         mobile,
         isNewAccount: true,
@@ -58,9 +81,9 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
         arguments: {
           'mobile': mobile,
           'verificationId': sentVerificationId,
-          'ownerName': _ownerNameController.text.trim(),
-          'businessName': _businessNameController.text.trim(),
-          'email': _emailController.text.trim(),
+          'ownerName': ownerName,
+          'businessName': businessName,
+          'email': email,
           'businessType': _selectedBusinessType,
           'isNewAccount': true,
         },

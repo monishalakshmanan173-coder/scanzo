@@ -22,6 +22,12 @@ class DefaultFirebaseOptions {
     }
   }
 
+  /// Returns true only if valid non-placeholder Firebase credentials are configured.
+  static bool get isConfigured {
+    final key = currentPlatform.apiKey;
+    return key.isNotEmpty && !key.toLowerCase().contains('placeholder');
+  }
+
   static const FirebaseOptions web = FirebaseOptions(
     apiKey: String.fromEnvironment(
       'FIREBASE_WEB_API_KEY',
