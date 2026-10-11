@@ -1,1 +1,1 @@
- D:\\smart\ billing\ app\\build\\web\\manifest.json:  D:\\smart\ billing\ app\\web\\index.html D:\\smart\ billing\ app\\web\\manifest.json
+ D:\\smart\ billing\ app\\build\\web\\favicon.png D:\\smart\ billing\ app\\build\\web\\manifest.json:  D:\\smart\ billing\ app\\web\\favicon.png D:\\smart\ billing\ app\\web\\index.html D:\\smart\ billing\ app\\web\\manifest.json

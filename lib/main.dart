@@ -20,14 +20,10 @@ void main() async {
   // Initialize Firebase for real Phone Authentication
   try {
     if (Firebase.apps.isEmpty) {
-      if (DefaultFirebaseOptions.isConfigured) {
-        await Firebase.initializeApp(
-          options: DefaultFirebaseOptions.currentPlatform,
-        );
-        debugPrint('Firebase initialized successfully for Phone Authentication.');
-      } else {
-        debugPrint('Firebase notice: Using placeholder credentials. Provide FIREBASE_WEB_API_KEY or external SMS provider for live SMS delivery.');
-      }
+      await Firebase.initializeApp(
+        options: DefaultFirebaseOptions.currentPlatform,
+      );
+      debugPrint('Firebase initialized successfully for Phone Authentication.');
     }
   } catch (e) {
     debugPrint('Firebase initialization notice: $e');

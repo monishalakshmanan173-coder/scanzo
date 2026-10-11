@@ -169,8 +169,8 @@ class OtpService {
     final formattedNumber = '+91$clean';
     final authInstance = _auth;
 
-    // A. If real Firebase configuration is detected, attempt Firebase Phone Auth
-    if (isFirebaseConfigured && authInstance != null) {
+    // A. Primary Provider: Firebase Phone Authentication
+    if (authInstance != null) {
       try {
         if (kIsWeb) {
           debugPrint('[OTP Provider] Dispatching via Firebase Web Phone Auth to ${maskMobile(clean)}...');
@@ -373,7 +373,7 @@ class OtpService {
     final cleanMobile = normalizeMobile(mobile);
 
     // 1. If Firebase Web Phone Auth confirmation result is active
-    if (_webConfirmationResult != null && isFirebaseConfigured) {
+    if (_webConfirmationResult != null) {
       try {
         debugPrint('[OTP Provider] Verifying code with Firebase Web confirmation result...');
         final cred = await _webConfirmationResult!.confirm(cleanOtp);
@@ -395,7 +395,6 @@ class OtpService {
     final authInstance = _auth;
     if (verificationId != null &&
         !verificationId.startsWith('scz_ver_') &&
-        isFirebaseConfigured &&
         authInstance != null &&
         !kIsWeb) {
       try {
