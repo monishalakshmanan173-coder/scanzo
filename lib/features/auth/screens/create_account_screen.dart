@@ -40,6 +40,7 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
   }
 
   Future<void> _handleCreateAccount() async {
+    if (_isLoading) return;
     setState(() => _errorMessage = null);
     if (!_formKey.currentState!.validate()) return;
 

@@ -33,6 +33,7 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   Future<void> _handleSendOtp() async {
+    if (_isLoading) return;
     setState(() => _errorMessage = null);
     if (!_formKey.currentState!.validate()) return;
 

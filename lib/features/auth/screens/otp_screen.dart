@@ -64,6 +64,7 @@ class _OtpScreenState extends State<OtpScreen> {
   String get _otpCode => _controllers.map((c) => c.text).join();
 
   Future<void> _handleVerify() async {
+    if (_isLoading) return;
     setState(() => _errorMessage = null);
     final otp = _otpCode;
     if (otp.length != 6) {
@@ -323,7 +324,11 @@ class _OtpScreenState extends State<OtpScreen> {
                       if (_resendTimer == 0)
                         GestureDetector(
                           onTap: () async {
-                            setState(() => _errorMessage = null);
+                            if (_isLoading) return;
+                            setState(() {
+                              _isLoading = true;
+                              _errorMessage = null;
+                            });
                             try {
                               final isNew = widget.arguments['isNewAccount'] ?? false;
                               final newVerId = await _authRepo.sendOtp(
@@ -352,6 +357,8 @@ class _OtpScreenState extends State<OtpScreen> {
                                 final msg = e.toString().replaceFirst(RegExp(r'^(Exception|AuthException|ValidationException):\s*'), '');
                                 setState(() => _errorMessage = msg);
                               }
+                            } finally {
+                              if (mounted) setState(() => _isLoading = false);
                             }
                           },
                           child: Text(

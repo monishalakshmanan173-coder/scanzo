@@ -64,7 +64,13 @@ class OtpService {
   final Map<String, OtpSession> _sessions = {};
   ConfirmationResult? _webConfirmationResult;
 
-  /// Check whether real (non-placeholder) Firebase credentials are provided
+  /// Explicit flag to allow test mocking during automated test runs
+  static bool isTestMode = false;
+
+  /// Returns true if currently running in an automated test environment
+  bool get isInTestEnvironment => isTestMode || (kDebugMode && !kIsWeb && Firebase.apps.isEmpty);
+
+  /// Check whether real (non-placeholder) Firebase credentials are configured
   bool get isFirebaseConfigured {
     try {
       final key = DefaultFirebaseOptions.currentPlatform.apiKey;
@@ -72,6 +78,37 @@ class OtpService {
     } catch (_) {
       return false;
     }
+  }
+
+  /// Check whether external SMS provider credentials are provided
+  bool get isExternalSmsConfigured {
+    const smsApiKey = String.fromEnvironment('SMS_API_KEY', defaultValue: '');
+    const smsGatewayUrl = String.fromEnvironment('SMS_GATEWAY_URL', defaultValue: '');
+    return smsApiKey.isNotEmpty || smsGatewayUrl.isNotEmpty;
+  }
+
+  /// Masks mobile number for safe production debug logging
+  static String maskMobile(String mobile) {
+    String clean = mobile.replaceAll(RegExp(r'\D'), '');
+    if (clean.startsWith('91') && clean.length == 12) {
+      clean = clean.substring(2);
+    } else if (clean.startsWith('0') && clean.length == 11) {
+      clean = clean.substring(1);
+    }
+    if (clean.length == 10) {
+      return '+91 ******${clean.substring(6)}';
+    } else if (clean.length > 4) {
+      return '******${clean.substring(clean.length - 4)}';
+    }
+    return '***';
+  }
+
+  /// Masks verification ID for safe production debug logging
+  static String maskVerId(String id) {
+    if (id.length > 8) {
+      return '${id.substring(0, 8)}...';
+    }
+    return id;
   }
 
   /// Normalizes phone number to clean 10-digit format
@@ -100,7 +137,7 @@ class OtpService {
 
     // 1. Enforce 30-second cooldown rate limit for repeated requests to this number
     final existingSession = _findLatestSessionForMobile(clean);
-    if (existingSession != null && !existingSession.isUsed) {
+    if (existingSession != null && !existingSession.isUsed && !forceResend) {
       final elapsedSeconds = DateTime.now().difference(existingSession.lastSentAt).inSeconds;
       if (elapsedSeconds < 30) {
         throw AuthException('Too many attempts. Please wait and try again.');
@@ -136,48 +173,62 @@ class OtpService {
     if (isFirebaseConfigured && authInstance != null) {
       try {
         if (kIsWeb) {
+          debugPrint('[OTP Provider] Dispatching via Firebase Web Phone Auth to ${maskMobile(clean)}...');
           final confirmationResult = await authInstance.signInWithPhoneNumber(formattedNumber);
           _webConfirmationResult = confirmationResult;
           final fbVerId = confirmationResult.verificationId;
+          debugPrint('[OTP Provider] Firebase Web Phone Auth: dispatch confirmed. Verification ID: ${maskVerId(fbVerId)}');
           onCodeSent?.call(fbVerId);
           return fbVerId;
         } else {
           final completer = Completer<String>();
+          debugPrint('[OTP Provider] Dispatching via Firebase Mobile Phone Auth to ${maskMobile(clean)}...');
           await authInstance.verifyPhoneNumber(
             phoneNumber: formattedNumber,
             timeout: const Duration(seconds: 60),
-            verificationCompleted: (_) {},
+            verificationCompleted: (_) {
+              debugPrint('[OTP Provider] Firebase auto-verification completed.');
+            },
             verificationFailed: (FirebaseAuthException e) {
+              debugPrint('[OTP Provider] Firebase Mobile Phone Auth failed: code=${e.code}');
               final mapped = mapAuthError(e);
               onError?.call(mapped);
               if (!completer.isCompleted) completer.completeError(AuthException(mapped));
             },
             codeSent: (String vid, int? token) {
+              debugPrint('[OTP Provider] Firebase Mobile Phone Auth: code sent. Verification ID: ${maskVerId(vid)}');
               onCodeSent?.call(vid);
               if (!completer.isCompleted) completer.complete(vid);
             },
             codeAutoRetrievalTimeout: (String vid) {
+              debugPrint('[OTP Provider] Firebase code auto retrieval timeout.');
               if (!completer.isCompleted) completer.complete(vid);
             },
           );
           return await completer.future.timeout(
             const Duration(seconds: 45),
-            onTimeout: () => verificationId,
+            onTimeout: () {
+              debugPrint('[OTP Provider] Firebase Phone Auth timed out waiting for codeSent.');
+              throw AuthException('OTP dispatch timed out. Please try again.');
+            },
           );
         }
       } catch (e) {
         if (e is AuthException) rethrow;
-        throw AuthException(mapAuthError(e));
+        final mapped = mapAuthError(e);
+        onError?.call(mapped);
+        throw AuthException(mapped);
       }
     }
 
     // B. Check for external SMS Provider (Fast2SMS / 2Factor / Twilio / Custom API Gateway)
-    final smsProvider = const String.fromEnvironment('SMS_PROVIDER', defaultValue: '').toLowerCase();
-    const smsApiKey = String.fromEnvironment('SMS_API_KEY', defaultValue: '');
-    const smsGatewayUrl = String.fromEnvironment('SMS_GATEWAY_URL', defaultValue: '');
+    if (isExternalSmsConfigured) {
+      final smsProvider = const String.fromEnvironment('SMS_PROVIDER', defaultValue: '').toLowerCase();
+      const smsApiKey = String.fromEnvironment('SMS_API_KEY', defaultValue: '');
+      const smsGatewayUrl = String.fromEnvironment('SMS_GATEWAY_URL', defaultValue: '');
 
-    if (smsApiKey.isNotEmpty || smsGatewayUrl.isNotEmpty) {
       try {
+        debugPrint('[OTP Provider] Dispatching via external SMS gateway ($smsProvider) to ${maskMobile(clean)}...');
         await _dispatchExternalSms(
           provider: smsProvider,
           apiKey: smsApiKey,
@@ -185,14 +236,27 @@ class OtpService {
           mobile: clean,
           otp: dynamicOtp,
         );
+        debugPrint('[OTP Provider] External SMS gateway dispatch confirmed.');
+        onCodeSent?.call(verificationId);
+        return verificationId;
       } catch (e) {
         if (e is AuthException) rethrow;
         throw AuthException('Unable to send OTP. Please try again.');
       }
     }
 
-    onCodeSent?.call(verificationId);
-    return verificationId;
+    // C. Check for Test / Mock Environment (Unit & Widget Tests Only)
+    if (isInTestEnvironment) {
+      debugPrint('[OTP Provider] Test environment active: simulated OTP dispatch confirmed.');
+      onCodeSent?.call(verificationId);
+      return verificationId;
+    }
+
+    // D. Production without configured provider -> Strict Failure (Never fake OTP dispatch!)
+    debugPrint('[OTP Provider] CRITICAL: No active SMS provider is configured for production.');
+    debugPrint('[OTP Provider] Firebase credentials are placeholder or missing (check FIREBASE_WEB_API_KEY).');
+    debugPrint('[OTP Provider] External SMS gateway is unconfigured (check SMS_API_KEY / SMS_GATEWAY_URL).');
+    throw AuthException('Unable to send OTP. SMS service is not configured. Please check deployment settings.');
   }
 
   /// Dispatches SMS via configured external SMS Gateway HTTP Provider
@@ -220,6 +284,7 @@ class OtpService {
           },
         ).timeout(const Duration(seconds: 15));
 
+        debugPrint('[OTP Provider] Fast2SMS response status: ${response.statusCode}');
         if (response.statusCode == 429) {
           throw AuthException('Too many attempts. Please wait and try again.');
         }
@@ -231,6 +296,7 @@ class OtpService {
         final uri = Uri.parse('https://2factor.in/API/V1/$apiKey/SMS/+91$mobile/$otp/ScanzoBilling');
         final response = await _http.get(uri).timeout(const Duration(seconds: 15));
 
+        debugPrint('[OTP Provider] 2Factor response status: ${response.statusCode}');
         if (response.statusCode == 429) {
           throw AuthException('Too many attempts. Please wait and try again.');
         }
@@ -255,6 +321,7 @@ class OtpService {
             },
           ).timeout(const Duration(seconds: 15));
 
+          debugPrint('[OTP Provider] Twilio response status: ${response.statusCode}');
           if (response.statusCode == 429) {
             throw AuthException('Too many attempts. Please wait and try again.');
           }
@@ -276,6 +343,7 @@ class OtpService {
         });
         final response = await _http.post(uri, headers: headers, body: body).timeout(const Duration(seconds: 15));
 
+        debugPrint('[OTP Provider] Custom gateway response status: ${response.statusCode}');
         if (response.statusCode == 429) {
           throw AuthException('Too many attempts. Please wait and try again.');
         }
@@ -285,6 +353,7 @@ class OtpService {
       }
     } catch (e) {
       if (e is AuthException) rethrow;
+      debugPrint('[OTP Provider] External SMS dispatch error: $e');
       throw AuthException('Unable to send OTP. Please try again.');
     }
   }
@@ -303,22 +372,53 @@ class OtpService {
 
     final cleanMobile = normalizeMobile(mobile);
 
-    // 1. If Firebase Phone Auth confirmation result is active
+    // 1. If Firebase Web Phone Auth confirmation result is active
     if (_webConfirmationResult != null && isFirebaseConfigured) {
       try {
+        debugPrint('[OTP Provider] Verifying code with Firebase Web confirmation result...');
         final cred = await _webConfirmationResult!.confirm(cleanOtp);
         if (cred.user != null) {
+          debugPrint('[OTP Provider] Firebase Web Phone Auth verification succeeded.');
           _webConfirmationResult = null;
           return true;
         }
       } on FirebaseAuthException catch (e) {
+        debugPrint('[OTP Provider] Firebase Web verify error: code=${e.code}');
         throw AuthException(mapAuthError(e));
       } catch (e) {
+        debugPrint('[OTP Provider] Firebase Web verify unexpected error: $e');
         throw AuthException('Invalid OTP. Please check the code and try again.');
       }
     }
 
-    // 2. Validate against session engine
+    // 2. If Firebase Mobile Phone Auth credential verification
+    final authInstance = _auth;
+    if (verificationId != null &&
+        !verificationId.startsWith('scz_ver_') &&
+        isFirebaseConfigured &&
+        authInstance != null &&
+        !kIsWeb) {
+      try {
+        debugPrint('[OTP Provider] Verifying code with Firebase Mobile PhoneAuthCredential...');
+        final credential = PhoneAuthProvider.credential(
+          verificationId: verificationId,
+          smsCode: cleanOtp,
+        );
+        final userCred = await authInstance.signInWithCredential(credential);
+        if (userCred.user != null) {
+          debugPrint('[OTP Provider] Firebase Mobile Phone Auth verification succeeded.');
+          return true;
+        }
+      } on FirebaseAuthException catch (e) {
+        debugPrint('[OTP Provider] Firebase Mobile verify error: code=${e.code}');
+        throw AuthException(mapAuthError(e));
+      } catch (e) {
+        debugPrint('[OTP Provider] Firebase Mobile verify unexpected error: $e');
+        throw AuthException('Invalid OTP. Please check the code and try again.');
+      }
+    }
+
+    // 3. Validate against local in-memory dynamic session engine (for External SMS Gateway & Tests)
     OtpSession? session;
     if (verificationId != null && _sessions.containsKey(verificationId)) {
       session = _sessions[verificationId];
@@ -366,7 +466,7 @@ class OtpService {
     return latest;
   }
 
-  /// Maps any Firebase or infrastructure error code into the user-friendly requirement errors.
+  /// Maps any Firebase or infrastructure error code into user-friendly requirement errors with safe diagnostics.
   String mapAuthError(dynamic error) {
     String code = '';
     if (error is FirebaseAuthException) {
@@ -381,26 +481,43 @@ class OtpService {
 
     switch (code) {
       case 'invalid-phone-number':
+        debugPrint('[OTP Provider] Diagnostics: Invalid phone number format.');
         return 'Please enter a valid 10-digit mobile number.';
       case 'too-many-requests':
+        debugPrint('[OTP Provider] Diagnostics: Throttled by provider due to too many requests.');
         return 'Too many attempts. Please wait and try again.';
       case 'invalid-verification-code':
+        debugPrint('[OTP Provider] Diagnostics: Verification code mismatch.');
         return 'Invalid OTP. Please check the code and try again.';
       case 'session-expired':
+        debugPrint('[OTP Provider] Diagnostics: Verification session expired.');
         return 'OTP expired. Please request a new OTP.';
       case 'network-request-failed':
-        return 'Unable to send OTP. Please try again.';
+        debugPrint('[OTP Provider] Diagnostics: Network connectivity failure.');
+        return 'Network error. Please check your internet connection and try again.';
+      case 'unauthorized-domain':
+        debugPrint('[OTP Provider] Diagnostics: Hosting domain unauthorized in Firebase Console > Authentication > Settings > Authorized Domains.');
+        return 'Deployment domain is not authorized for SMS verification. Please contact support.';
       case 'quota-exceeded':
       case 'billing-not-enabled':
-      case 'captcha-check-failed':
-      case 'app-not-authorized':
-      case 'unauthorized-domain':
+        debugPrint('[OTP Provider] Diagnostics: SMS daily quota exceeded or billing not enabled in Firebase.');
+        return 'SMS quota reached for today. Please try again later or contact support.';
       case 'operation-not-allowed':
+        debugPrint('[OTP Provider] Diagnostics: Phone sign-in is disabled in Firebase Console.');
+        return 'Phone sign-in is disabled. Please contact support.';
+      case 'captcha-check-failed':
+        debugPrint('[OTP Provider] Diagnostics: reCAPTCHA verification failed or cancelled by user.');
+        return 'Verification check failed. Please refresh and try again.';
       case 'invalid-app-credential':
+      case 'missing-app-credential':
+        debugPrint('[OTP Provider] Diagnostics: App credential / reCAPTCHA token missing or expired.');
+        return 'Verification check failed. Please refresh and try again.';
       case 'invalid-api-key':
       case 'api-key-not-valid':
-        return 'Unable to send OTP. Please try again.';
+        debugPrint('[OTP Provider] Diagnostics: Firebase Web API key is invalid.');
+        return 'Authentication configuration error. Please contact support.';
       default:
+        debugPrint('[OTP Provider] Diagnostics: Provider error code: $code');
         return 'Unable to send OTP. Please try again.';
     }
   }

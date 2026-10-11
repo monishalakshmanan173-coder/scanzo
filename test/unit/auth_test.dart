@@ -280,6 +280,41 @@ void main() {
       expect(authRepo.isLoggedIn, true);
     });
 
+    test('Production Diagnostics & Safe Masking: Mobile numbers and Verification IDs are safely masked for logs', () {
+      expect(OtpService.maskMobile('9876543210'), '+91 ******3210');
+      expect(OtpService.maskMobile('+919876543210'), '+91 ******3210');
+      expect(OtpService.maskMobile('123'), '***');
+      expect(OtpService.maskVerId('scz_ver_1728639201928_abcd'), 'scz_ver_...');
+      expect(OtpService.maskVerId('short'), 'short');
+    });
+
+    test('Firebase Error Mapping: mapAuthError maps critical production error codes', () {
+      expect(
+        otpService.mapAuthError('auth/unauthorized-domain'),
+        'Deployment domain is not authorized for SMS verification. Please contact support.',
+      );
+      expect(
+        otpService.mapAuthError('auth/quota-exceeded'),
+        'SMS quota reached for today. Please try again later or contact support.',
+      );
+      expect(
+        otpService.mapAuthError('auth/operation-not-allowed'),
+        'Phone sign-in is disabled. Please contact support.',
+      );
+      expect(
+        otpService.mapAuthError('auth/captcha-check-failed'),
+        'Verification check failed. Please refresh and try again.',
+      );
+      expect(
+        otpService.mapAuthError('auth/invalid-verification-code'),
+        'Invalid OTP. Please check the code and try again.',
+      );
+      expect(
+        otpService.mapAuthError('auth/session-expired'),
+        'OTP expired. Please request a new OTP.',
+      );
+    });
+
     test('User Data Isolation: User A cannot see User B stores, products, or sales', () async {
       // Create User A
       const mobileA = '9000000001';
