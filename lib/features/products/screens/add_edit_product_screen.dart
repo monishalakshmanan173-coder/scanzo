@@ -9,6 +9,7 @@ import '../../../shared/widgets/scanzo_button.dart';
 import '../../../shared/widgets/scanzo_text_field.dart';
 import '../../../data/models/product.dart';
 import '../../../data/repositories/product_repository.dart';
+import '../../../data/database/database_helper.dart';
 import '../../../app/routes.dart';
 
 class AddEditProductScreen extends StatefulWidget {
@@ -154,6 +155,73 @@ class _AddEditProductScreenState extends State<AddEditProductScreen> {
   Widget build(BuildContext context) {
     final isEditing = _existingProduct != null;
     final categories = _productRepo.getAllCategories();
+    final activeStoreType = DatabaseHelper().activeStoreType.toLowerCase();
+
+    String subcategoryLabel;
+    String subcategoryHint;
+    String notesLabel;
+    String notesHint;
+    String brandHint;
+
+    switch (activeStoreType) {
+      case 'electronics':
+        subcategoryLabel = 'Model / Number';
+        subcategoryHint = 'e.g. Rockerz 450, Flip 6, GaN 65W';
+        notesLabel = 'Warranty / Specifications';
+        notesHint = 'e.g. 1 Year Brand Warranty | 15hr Playback';
+        brandHint = 'e.g. boAt, Sony, Anker, JBL';
+        break;
+      case 'medical':
+      case 'pharmacy':
+        subcategoryLabel = 'Salt / Generic Name';
+        subcategoryHint = 'e.g. Paracetamol 650mg, Zinc 50mg';
+        notesLabel = 'Prescription / Storage Notes';
+        notesHint = 'e.g. 15 tabs/strip | Store below 25°C';
+        brandHint = 'e.g. Cipla, Abbott, Sun Pharma';
+        break;
+      case 'clothing':
+      case 'fashion':
+        subcategoryLabel = 'Style / Fit';
+        subcategoryHint = 'e.g. Slim Fit, Crew Neck, A-Line';
+        notesLabel = 'Size & Fabric Details';
+        notesHint = 'e.g. Size M | 100% Bio-Wash Cotton';
+        brandHint = 'e.g. Levis, Zara, Wrangler, FabIndia';
+        break;
+      case 'grocery':
+        subcategoryLabel = 'Variety / Form';
+        subcategoryHint = 'e.g. Sharbati, Kachi Ghani, W240';
+        notesLabel = 'Shelf Life / Storage Instructions';
+        notesHint = 'e.g. Store in cool, dry airtight jar';
+        brandHint = 'e.g. Amul, Aashirvaad, Fortune, Tata';
+        break;
+      case 'retail':
+      default:
+        subcategoryLabel = 'Subcategory / Type (Optional)';
+        subcategoryHint = 'e.g. Basmati, Toiletries, Dental';
+        notesLabel = 'Product Notes & Highlights';
+        notesHint = 'e.g. Special festive packaging';
+        brandHint = 'e.g. Britannia, Dove, Colgate, Daawat';
+        break;
+    }
+
+    final categoryOptions = categories.map((c) => c.name).toSet().toList();
+    if (_selectedCategory.isNotEmpty && !categoryOptions.contains(_selectedCategory)) {
+      categoryOptions.insert(0, _selectedCategory);
+    }
+    if (categoryOptions.isEmpty) {
+      categoryOptions.add(_selectedCategory.isNotEmpty ? _selectedCategory : 'General');
+    }
+    final effectiveCategory = categoryOptions.contains(_selectedCategory)
+        ? _selectedCategory
+        : categoryOptions.first;
+
+    final unitOptions = List<String>.from(AppConstants.productUnits);
+    if (_selectedUnit.isNotEmpty && !unitOptions.contains(_selectedUnit)) {
+      unitOptions.add(_selectedUnit);
+    }
+    final effectiveUnit = unitOptions.contains(_selectedUnit)
+        ? _selectedUnit
+        : (unitOptions.isNotEmpty ? unitOptions.first : 'Pcs');
 
     return Scaffold(
       backgroundColor: AppColors.backgroundCream,
@@ -250,11 +318,17 @@ class _AddEditProductScreenState extends State<AddEditProductScreen> {
                             Expanded(
                               child: ScanzoTextField(
                                 label: 'Brand (Optional)',
-                                hint: 'e.g. India Gate',
+                                hint: brandHint,
                                 controller: _brandController,
                               ),
                             ),
                           ],
+                        ),
+                        const SizedBox(height: 12),
+                        ScanzoTextField(
+                          label: subcategoryLabel,
+                          hint: subcategoryHint,
+                          controller: _subcategoryController,
                         ),
                         const SizedBox(height: 12),
                         // Category & Unit Row
@@ -268,10 +342,10 @@ class _AddEditProductScreenState extends State<AddEditProductScreen> {
                                   Text('Category', style: AppTypography.bodySmall.copyWith(fontWeight: FontWeight.bold)),
                                   const SizedBox(height: 6),
                                   DropdownButtonFormField<String>(
-                                    value: categories.any((c) => c.name == _selectedCategory) ? _selectedCategory : 'General',
+                                    value: effectiveCategory,
                                     decoration: const InputDecoration(filled: true, fillColor: AppColors.surfaceWhite),
-                                    items: categories.map((c) {
-                                      return DropdownMenuItem(value: c.name, child: Text(c.name));
+                                    items: categoryOptions.map((c) {
+                                      return DropdownMenuItem(value: c, child: Text(c));
                                     }).toList(),
                                     onChanged: (val) {
                                       if (val != null) setState(() => _selectedCategory = val);
@@ -289,9 +363,9 @@ class _AddEditProductScreenState extends State<AddEditProductScreen> {
                                   Text('Unit', style: AppTypography.bodySmall.copyWith(fontWeight: FontWeight.bold)),
                                   const SizedBox(height: 6),
                                   DropdownButtonFormField<String>(
-                                    value: _selectedUnit,
+                                    value: effectiveUnit,
                                     decoration: const InputDecoration(filled: true, fillColor: AppColors.surfaceWhite),
-                                    items: AppConstants.productUnits.map((u) {
+                                    items: unitOptions.map((u) {
                                       return DropdownMenuItem(value: u, child: Text(u));
                                     }).toList(),
                                     onChanged: (val) {
@@ -429,6 +503,12 @@ class _AddEditProductScreenState extends State<AddEditProductScreen> {
                               ),
                             ),
                           ],
+                        ),
+                        const SizedBox(height: 12),
+                        ScanzoTextField(
+                          label: notesLabel,
+                          hint: notesHint,
+                          controller: _notesController,
                         ),
                       ],
                     ),

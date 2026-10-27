@@ -196,5 +196,131 @@ SKU-NEW,Unique Toothpaste,Personal Care,45.00,8908888888888
       expect(analysis.validRows.length, 1);
       expect(analysis.duplicateRows.first.errors.any((e) => e.contains('Duplicate Barcode')), true);
     });
+
+    test('Store-Specific Templates: All 5 store types produce distinct, realistic products and fields', () {
+      // 1. Retail Store
+      final retailCsv = ExcelImportService.generateSampleCsv('retail');
+      expect(retailCsv.contains('RET-101'), true);
+      expect(retailCsv.contains('Basmati Rice') && retailCsv.contains('Foodgrains & Staples'), true);
+      expect(retailCsv.contains('Edible Oils') && retailCsv.contains('Snacks & Biscuits'), true);
+
+      // 2. Electronics Store - realistic brand, model, warranty
+      final elecCsv = ExcelImportService.generateSampleCsv('electronics');
+      expect(elecCsv.contains('ELEC-101'), true);
+      expect(elecCsv.contains('boAt') || elecCsv.contains('Boat'), true);
+      expect(elecCsv.contains('Rockerz 450') || elecCsv.contains('Nano Pro'), true);
+      expect(elecCsv.contains('Warranty'), true);
+      expect(elecCsv.contains('Audio & Headphones'), true);
+      expect(elecCsv.contains('Power & Chargers'), true);
+
+      // 3. Medical / Pharmacy - medicines, batch, expiry, strip/bottle units
+      final medCsv = ExcelImportService.generateSampleCsv('medical');
+      expect(medCsv.contains('MED-101'), true);
+      expect(medCsv.contains('Paracetamol') || medCsv.contains('Dolo 650'), true);
+      expect(medCsv.contains('Strip') || medCsv.contains('Bottle'), true);
+      expect(medCsv.contains('Medicines'), true);
+      expect(medCsv.contains('2027-12-31') || medCsv.contains('BATCH'), true);
+
+      // 4. Clothing / Fashion - menswear, denim, sizes, fabric
+      final fashCsv = ExcelImportService.generateSampleCsv('clothing');
+      expect(fashCsv.contains('FASH-101'), true);
+      expect(fashCsv.contains('Levis') || fashCsv.contains('Wrangler'), true);
+      expect(fashCsv.contains('Menswear') && fashCsv.contains('Denim & Jeans'), true);
+      expect(fashCsv.contains('bio-wash cotton') || fashCsv.contains('Size'), true);
+
+      // 5. Grocery / Supermarket - dairy, staples, mustard oil, tea
+      final grocCsv = ExcelImportService.generateSampleCsv('grocery');
+      expect(grocCsv.contains('GROC-101'), true);
+      expect(grocCsv.contains('Amul') || grocCsv.contains('Aashirvaad'), true);
+      expect(grocCsv.contains('Dairy & Milk') && grocCsv.contains('Staples & Grains'), true);
+      expect(grocCsv.contains('Edible Oils'), true);
+
+      // Verify each store type produces different content (not generic)
+      expect(retailCsv != elecCsv, true);
+      expect(elecCsv != medCsv, true);
+      expect(medCsv != fashCsv, true);
+      expect(fashCsv != grocCsv, true);
+    });
+
+    test('Blank import template generation for store types includes correct headers and column structure', () {
+      final blankRetail = ExcelImportService.generateBlankTemplateCsv('retail');
+      expect(blankRetail.contains('Product Code,Product Name,Category'), true);
+      expect(blankRetail.contains('Selling Price,MRP'), true);
+
+      final blankElec = ExcelImportService.generateBlankTemplateCsv('electronics');
+      expect(blankElec.contains('18'), true); // 18% GST default
+
+      final blankMed = ExcelImportService.generateBlankTemplateCsv('medical');
+      expect(blankMed.contains('Strip') || blankMed.contains('Generic'), true);
+    });
+
+    test('validateRowData validates inline edits, updates validity, and enforces store isolation', () {
+      final existingProducts = [
+        Product(
+          id: 'p_ex',
+          sku: 'SKU-EXIST',
+          barcode: '8901111111111',
+          name: 'Existing Phone',
+          category: 'Smart Devices',
+          purchasePrice: 10000,
+          sellingPrice: 15000,
+          mrp: 18000,
+          storeId: 'store_alpha',
+          createdAt: DateTime.now(),
+          updatedAt: DateTime.now(),
+        ),
+      ];
+
+      // 1. Invalid row with missing price and name
+      final invalidRow = ExcelImportService.validateRowData(
+        rowIndex: 1,
+        rawData: {'Product Name': '', 'Selling Price': ''},
+        existingProducts: existingProducts,
+        otherBarcodesInFile: {},
+        otherSkusInFile: {},
+        targetStoreId: 'store_alpha',
+      );
+      expect(invalidRow.isValid, false);
+      expect(invalidRow.errors.contains('Missing Product Name'), true);
+      expect(invalidRow.errors.contains('Invalid Selling Price ()'), true);
+
+      // 2. Fix the invalid row by providing name and selling price
+      final fixedRow = ExcelImportService.validateRowData(
+        rowIndex: 1,
+        rawData: {
+          'Product Name': 'Wireless Earbuds Pro',
+          'Selling Price': '2999.00',
+          'Category': 'Audio & Headphones',
+          'Brand': 'boAt',
+          'Barcode': '8902222222222',
+        },
+        existingProducts: existingProducts,
+        otherBarcodesInFile: {},
+        otherSkusInFile: {},
+        targetStoreId: 'store_alpha',
+      );
+      expect(fixedRow.isValid, true);
+      expect(fixedRow.errors.isEmpty, true);
+      expect(fixedRow.product?.name, 'Wireless Earbuds Pro');
+      expect(fixedRow.product?.sellingPrice, 2999.00);
+      expect(fixedRow.product?.storeId, 'store_alpha'); // Strictly assigned to target store
+
+      // 3. Duplicate barcode check
+      final dupRow = ExcelImportService.validateRowData(
+        rowIndex: 2,
+        rawData: {
+          'Product Name': 'Duplicate Earbuds',
+          'Selling Price': '1999.00',
+          'Barcode': '8901111111111', // Collides with existing product
+        },
+        existingProducts: existingProducts,
+        otherBarcodesInFile: {},
+        otherSkusInFile: {},
+        targetStoreId: 'store_alpha',
+      );
+      expect(dupRow.isDuplicate, true);
+      expect(dupRow.isValid, false);
+      expect(dupRow.errors.any((e) => e.contains('Duplicate Barcode')), true);
+    });
   });
 }

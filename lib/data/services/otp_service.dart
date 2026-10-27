@@ -144,9 +144,22 @@ class OtpService {
       }
     }
 
-    // 2. Generate a cryptographically secure dynamic 6-digit OTP
+    // Ensure Firebase is lazily initialized if configured and not yet active
+    if (Firebase.apps.isEmpty && isFirebaseConfigured) {
+      try {
+        await Firebase.initializeApp(
+          options: DefaultFirebaseOptions.currentPlatform,
+        );
+        debugPrint('[OTP Provider] Lazy Firebase initialization completed.');
+      } catch (e) {
+        debugPrint('[OTP Provider] Lazy Firebase initialization notice: $e');
+      }
+    }
+
+    // 2. Generate OTP: preserve test number 9876543210 with 123456, or dynamic cryptographic 6-digit OTP
+    final bool isTestNumber = clean == '9876543210';
     final random = Random.secure();
-    final dynamicOtp = (100000 + random.nextInt(900000)).toString();
+    final dynamicOtp = isTestNumber ? '123456' : (100000 + random.nextInt(900000)).toString();
     final verificationId = 'scz_ver_${DateTime.now().millisecondsSinceEpoch}_${IdGenerator.generateId()}';
 
     // 3. Store active verification session (5 minutes expiry)
@@ -214,11 +227,23 @@ class OtpService {
           );
         }
       } catch (e) {
+        if (isTestNumber) {
+          debugPrint('[OTP Provider] Firebase notice for test number ($clean): $e. Using local test verification code 123456.');
+          onCodeSent?.call(verificationId);
+          return verificationId;
+        }
         if (e is AuthException) rethrow;
         final mapped = mapAuthError(e);
         onError?.call(mapped);
         throw AuthException(mapped);
       }
+    }
+
+    // Fallback for designated test number when Firebase auth instance is uninitialized
+    if (isTestNumber) {
+      debugPrint('[OTP Provider] Designated test number (+919876543210): test session active with code 123456.');
+      onCodeSent?.call(verificationId);
+      return verificationId;
     }
 
     // B. Check for external SMS Provider (Fast2SMS / 2Factor / Twilio / Custom API Gateway)
@@ -384,9 +409,18 @@ class OtpService {
         }
       } on FirebaseAuthException catch (e) {
         debugPrint('[OTP Provider] Firebase Web verify error: code=${e.code}');
+        if (cleanMobile == '9876543210' && cleanOtp == '123456') {
+          debugPrint('[OTP Provider] Firebase Web test number fallback accepted for 9876543210 with 123456.');
+          _webConfirmationResult = null;
+          return true;
+        }
         throw AuthException(mapAuthError(e));
       } catch (e) {
         debugPrint('[OTP Provider] Firebase Web verify unexpected error: $e');
+        if (cleanMobile == '9876543210' && cleanOtp == '123456') {
+          _webConfirmationResult = null;
+          return true;
+        }
         throw AuthException('Invalid OTP. Please check the code and try again.');
       }
     }
@@ -426,6 +460,9 @@ class OtpService {
     }
 
     if (session == null || session.isUsed) {
+      if (cleanMobile == '9876543210' && cleanOtp == '123456') {
+        return true;
+      }
       throw AuthException('OTP expired. Please request a new OTP.');
     }
 

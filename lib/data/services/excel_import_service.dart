@@ -56,81 +56,117 @@ class ExcelImportService {
 
     if (type == 'electronics') {
       buffer.writeln(
-          'ELEC-101,Bluetooth Wireless Headphones,Audio,Headphones,Boat,8901234100101,Pcs,899.00,1499.00,1999.00,0,18,45,10,Boat Direct,BT2026,2028-12-31,Deep bass stereo');
+          'ELEC-101,Bluetooth Wireless Headphones,Audio & Headphones,Rockerz 450,boAt,8901234100101,Pcs,899.00,1499.00,1999.00,0,18,45,10,boAt Direct,BT2026,,1 Year Brand Warranty | 15hr playback');
       buffer.writeln(
-          'ELEC-102,Fast USB-C Charger 65W,Accessories,Charger,Anker,8901234100102,Pcs,650.00,1299.00,1499.00,0,18,60,15,Anker India,ANK01,,GaN fast charging');
+          'ELEC-102,Fast USB-C Wall Charger 65W,Power & Chargers,Nano Pro GaN,Anker,8901234100102,Pcs,650.00,1299.00,1499.00,0,18,60,15,Anker India,ANK65,,18 Months Replacement Warranty | GaN III');
       buffer.writeln(
-          'ELEC-103,Braided USB-C Cable 1.5m,Accessories,Cables,Portronics,8901234100103,Pcs,120.00,299.00,399.00,0,18,100,20,Portronics Hub,CBL99,,Durable nylon');
+          'ELEC-103,Braided USB-C Cable 1.5m,Cables & Adapters,Konnect Core,Portronics,8901234100103,Pcs,120.00,299.00,399.00,0,18,100,20,Portronics Hub,CBL99,,6 Months Warranty | Heavy-duty nylon');
       buffer.writeln(
-          'ELEC-104,Power Bank 20000mAh Dual Port,Power,Power Bank,Mi,8901234100104,Pcs,1200.00,1999.00,2499.00,0,18,30,8,Mi Dist,PB02,,18W quick charge');
+          'ELEC-104,Power Bank 20000mAh 22.5W,Power & Chargers,PB200,Xiaomi,8901234100104,Pcs,1200.00,1999.00,2499.00,0,18,30,8,Xiaomi Dist,PB02,,6 Months Domestic Warranty | Triple ports');
       buffer.writeln(
-          'ELEC-105,Portable Bluetooth Speaker,Audio,Speakers,JBL,8901234100105,Pcs,1600.00,2499.00,2999.00,0,18,25,5,JBL Audio,SPK44,,Waterproof IPX7');
+          'ELEC-105,Waterproof Bluetooth Speaker,Audio & Headphones,Flip 6,JBL,8901234100105,Pcs,4500.00,6999.00,8999.00,0,18,20,5,JBL Audio,SPK44,,1 Year Brand Warranty | IP67 waterproof');
+      buffer.writeln(
+          'ELEC-106,Smart Fitness Watch SpO2,Smart Devices,Wave Call,Noise,8901234100106,Pcs,1199.00,1899.00,2499.00,0,18,35,10,Noise Direct,WAV01,,1 Year Brand Warranty | BT Calling & Heart Rate');
     } else if (type == 'clothing' || type == 'fashion') {
       buffer.writeln(
-          'FASH-101,Premium Cotton Crew T-Shirt,Menswear,T-Shirt,Levis,8902234100201,Pcs,350.00,699.00,899.00,0,5,50,15,Levis Apparel,T26,2029-01-01,100% bio-wash cotton');
+          'FASH-101,Classic Crew Neck Cotton T-Shirt,Menswear,Crew T-Shirt,Levis,8902234100201,Pcs,380.00,699.00,899.00,0,5,60,15,Levis Apparel,TS-BLK-M,,Size M | 100% bio-wash cotton');
       buffer.writeln(
-          'FASH-102,Slim Fit Stretch Denim Jeans,Menswear,Jeans,Wrangler,8902234100202,Pcs,1100.00,1899.00,2299.00,0,12,35,10,Denim Corp,J09,,Mid-rise dark wash');
+          'FASH-102,Slim Fit Stretch Denim Jeans,Denim & Jeans,Slim Fit,Wrangler,8902234100202,Pcs,1150.00,1999.00,2499.00,0,12,40,10,Denim Corp,JN-32,,Size 32 | Mid-rise indigo stretch');
       buffer.writeln(
-          'FASH-103,Floral Casual Summer Dress,Womenswear,Dress,Zara,8902234100203,Pcs,850.00,1499.00,1999.00,0,12,25,8,Fashion Hub,D45,,Breathable rayon');
+          'FASH-103,Floral Casual Summer Dress,Dresses & Tops,Summer Dress,Zara,8902234100203,Pcs,890.00,1599.00,1999.00,0,12,30,8,Fashion Hub,DR-FL-S,,Size S | Breathable lightweight rayon');
       buffer.writeln(
-          'FASH-104,Silk Blend Traditional Saree,Ethnic,Saree,FabIndia,8902234100204,Pcs,1800.00,2999.00,3499.00,0,5,20,5,Ethnic Silk,S01,,With blouse piece');
+          'FASH-104,Chanderi Silk Traditional Saree,Ethnic Wear,Saree Set,FabIndia,8902234100204,Set,1800.00,2999.00,3499.00,0,5,20,5,Ethnic Silk,S01,,With blouse piece | Dry clean only');
       buffer.writeln(
-          'FASH-105,Casual Linen Full Sleeve Shirt,Menswear,Shirt,Allen Solly,8902234100205,Pcs,750.00,1299.00,1599.00,0,5,40,12,Solly Store,SH88,,Pre-washed linen');
+          'FASH-105,Casual Linen Full Sleeve Shirt,Menswear,Linen Shirt,Allen Solly,8902234100205,Pcs,750.00,1299.00,1599.00,0,5,45,12,Solly Store,SH-40-WHT,,Size 40 | Pure pre-washed linen');
+      buffer.writeln(
+          'FASH-106,Genuine Leather Formal Belt,Fashion Accessories,Reversible Belt,Woodland,8902234100206,Pcs,550.00,999.00,1299.00,0,12,45,10,Woodland Supply,BLT-BRN,,Reversible Black/Brown full grain');
     } else if (type == 'medical' || type == 'pharmacy') {
       buffer.writeln(
-          'MED-101,Paracetamol 500mg Strip,Medicines,Pain Relief,Cipla,8903234100301,Strip,18.00,30.00,35.00,0,12,200,40,Cipla Pharma,BATCH-P5,2027-11-30,Antipyretic');
+          'MED-101,Paracetamol 650mg Tablets,Medicines,Dolo 650,Micro Labs,8903234100301,Strip,22.00,32.00,35.00,0,12,300,50,Micro Labs,DL650-26,2027-12-31,Analgesic & antipyretic | 15 tabs per strip');
       buffer.writeln(
-          'MED-102,Vitamin C + Zinc Chewable,Wellness,Supplements,Abbott,8903234100302,Bottle,75.00,120.00,140.00,0,12,80,20,Abbott Direct,VC-2026,2027-08-31,Immunity booster');
+          'MED-102,Vitamin C + Zinc Chewable,Vitamins & Wellness,Limcee 500,Abbott,8903234100302,Strip,18.00,28.00,32.00,0,12,150,30,Abbott Direct,LC-500,2027-08-31,Immunity booster orange flavor');
       buffer.writeln(
-          'MED-103,Waterproof Antiseptic Bandages,First Aid,Bandages,Dettol,8903234100303,Pack,50.00,85.00,95.00,0,12,150,30,Dettol Med,BNDG01,2028-06-30,Pack of 20');
+          'MED-103,Waterproof Antiseptic Bandages,First Aid,Bandages,Johnson & Johnson,8903234100303,Pack,45.00,75.00,85.00,0,12,120,25,J&J India,BA-100,2028-06-30,Pack of 20 sterile medicated strips');
       buffer.writeln(
-          'MED-104,Hand Sanitizer Gel 500ml,Hygiene,Sanitizer,Lifebuoy,8903234100304,Bottle,90.00,150.00,165.00,0,18,60,15,HUL Supply,HS500,2027-12-31,70% alcohol');
+          'MED-104,Digital Infrared Forehead Thermometer,Health Devices,DT-01,Omron,8903234100304,Pcs,950.00,1499.00,1899.00,0,12,25,5,Omron Med,OMR24,,3 Years Warranty | Contactless reading');
       buffer.writeln(
-          'MED-105,Ayurvedic Herbal Cough Syrup,Medicines,Syrup,Dabur,8903234100305,Bottle,60.00,95.00,110.00,0,5,75,20,Dabur India,CS-100,2027-05-31,Honey based 100ml');
+          'MED-105,Antiseptic Liquid 500ml,Personal Hygiene,Dettol Liquid,Reckitt,8903234100305,Bottle,140.00,185.00,205.00,0,18,80,15,Reckitt Supply,DT500,2028-03-31,Disinfectant for first aid & hygiene');
+      buffer.writeln(
+          'MED-106,Moisturizing Skin Repair Lotion 200ml,Skincare,Daily Advance,Cetaphil,8903234100306,Bottle,320.00,440.00,490.00,0,18,40,10,Galderma India,CT200,2027-10-31,Dermatologically tested sensitive skin');
     } else if (type == 'grocery') {
       buffer.writeln(
-          'GROC-101,Pure Cow Milk 1L,Dairy,Milk,Amul,8905234100501,Pcs,58.00,66.00,66.00,0,0,50,10,Amul Dairy,MK01,2026-10-12,Pasteurized milk');
+          'GROC-101,Standardized Fresh Milk 1L,Dairy & Milk,Toned Milk,Amul,8905234100501,Pcs,58.00,66.00,66.00,0,0,60,15,Amul Dairy,MK-PAST,2026-10-14,Pasteurized homogenized toned milk');
       buffer.writeln(
-          'GROC-102,Whole Wheat Atta 10kg,Staples,Flour,Aashirvaad,8905234100502,Kg,360.00,410.00,440.00,0,5,35,10,ITC Supply,AT10,2027-06-30,100% whole wheat');
+          'GROC-102,Premium Sharbati Atta 10kg,Staples & Grains,Whole Wheat Flour,Aashirvaad,8905234100502,Kg,380.00,430.00,460.00,0,5,40,10,ITC Consumer,SH-AT10,2027-06-30,100% MP Sharbati whole wheat');
       buffer.writeln(
-          'GROC-103,Iodized Crystal Salt 1kg,Staples,Salt,Tata,8905234100503,Kg,22.00,28.00,30.00,0,0,150,30,Tata Consumer,SLT99,,Vacuum evaporated');
+          'GROC-103,Pure Mustard Oil 1L Bottle,Edible Oils,Kachi Ghani,Fortune,8905234100503,Bottle,135.00,160.00,175.00,0,5,70,20,Adani Wilmar,KG-MO01,2027-09-30,Cold pressed natural pungency');
       buffer.writeln(
-          'GROC-104,Extra Virgin Olive Oil 500ml,Edible Oils,Oil,Figaro,8905234100504,Pcs,390.00,490.00,550.00,0,5,25,8,Figaro Impex,EVO50,2028-04-30,Cold pressed');
+          'GROC-104,Organic Turmeric Powder 500g,Spices & Condiments,Ground Spices,Catch,8905234100504,Pack,85.00,115.00,130.00,0,5,90,20,Catch Spices,SP-TUR50,2027-11-30,High curcumin content');
       buffer.writeln(
-          'GROC-105,Organic Green Tea Bags 25s,Beverages,Tea,Tetley,8905234100505,Box,135.00,175.00,195.00,0,5,45,12,Tata Tea,GT25,2027-09-30,Rich antioxidants');
+          'GROC-105,Pure Leaf Assam Premium Tea 500g,Beverages,Black Tea,Tata Tea Gold,8905234100505,Pack,210.00,270.00,295.00,0,5,50,15,Tata Consumer,TT-GLD50,2027-12-31,Rich aroma long leaves blend');
+      buffer.writeln(
+          'GROC-106,Classic Roasted Salted Cashews 200g,Packaged Foods,Dry Fruits,Happilo,8905234100506,Pack,180.00,250.00,290.00,0,12,45,10,Happilo Foods,CSH-200,2027-08-31,Crispy vacuum packed W240 grade');
     } else if (type == 'bakery') {
       buffer.writeln(
-          'BAKE-101,Chocolate Truffle Cake 500g,Cakes,Pastry,Bakery Fresh,8906234100601,Pcs,280.00,450.00,499.00,0,5,15,5,In-House,CK01,2026-10-10,Belgian dark chocolate');
+          'BAKE-101,Chocolate Truffle Cake 500g,Cakes & Pastries,Pastry,Bakery Fresh,8906234100601,Pcs,280.00,450.00,499.00,0,5,15,5,In-House,CK01,2026-10-10,Belgian dark chocolate');
       buffer.writeln(
-          'BAKE-102,Fresh Butter Croissant,Pastry,Bakery,Bakery Fresh,8906234100602,Pcs,35.00,65.00,75.00,0,5,30,10,In-House,CR02,2026-10-09,French butter');
+          'BAKE-102,Fresh Butter Croissant,Cakes & Pastries,Bakery,Bakery Fresh,8906234100602,Pcs,35.00,65.00,75.00,0,5,30,10,In-House,CR02,2026-10-09,French butter');
       buffer.writeln(
-          'BAKE-103,100% Whole Wheat Brown Bread,Breads,Bread,Daily Bake,8906234100603,Pcs,30.00,45.00,50.00,0,0,40,15,Daily Fresh,BR03,2026-10-11,High fiber');
+          'BAKE-103,100% Whole Wheat Brown Bread,Fresh Breads,Bread,Daily Bake,8906234100603,Pcs,30.00,45.00,50.00,0,0,40,15,Daily Fresh,BR03,2026-10-11,High fiber');
       buffer.writeln(
-          'BAKE-104,Choco-Chip Artisanal Cookies 200g,Cookies,Snacks,Bakery Fresh,8906234100604,Pack,70.00,120.00,140.00,0,5,35,10,In-House,CC04,2026-11-30,Handmade crunchy');
+          'BAKE-104,Choco-Chip Artisanal Cookies 200g,Cookies & Biscuits,Cookies,Bakery Fresh,8906234100604,Pack,70.00,120.00,140.00,0,5,35,10,In-House,CC04,2026-11-30,Handmade crunchy');
       buffer.writeln(
-          'BAKE-105,Cold Brew Roasted Coffee 250ml,Beverages,Cafe,Artisan Brew,8906234100605,Bottle,50.00,99.00,120.00,0,12,25,8,Coffee Roasters,CB05,2026-10-20,Single origin Arabica');
+          'BAKE-105,Cold Brew Roasted Coffee 250ml,Beverages & Coffee,Cafe,Artisan Brew,8906234100605,Bottle,50.00,99.00,120.00,0,12,25,8,Coffee Roasters,CB05,2026-10-20,Single origin Arabica');
     } else if (type == 'retail') {
       buffer.writeln(
-          'RET-101,Basmati Rice Premium 5kg,Foodgrains,Rice,Daawat,8904234100401,Kg,350.00,420.00,480.00,0,5,40,10,LT Foods,BR5K,2027-10-31,Aged royal grains');
+          'RET-101,Basmati Rice Premium 5kg,Foodgrains & Staples,Rice,Daawat,8904234100401,Kg,350.00,420.00,480.00,0,5,40,10,LT Foods,BR5K,2027-10-31,Aged royal grains');
       buffer.writeln(
-          'RET-102,Sunflower Cooking Oil 1L Pouch,Edible Oil,Oil,Fortune,8904234100402,Pcs,115.00,135.00,150.00,0,5,80,20,Adani Wilmar,SF01,2027-04-30,Refined healthy oil');
+          'RET-102,Sunflower Cooking Oil 1L Pouch,Edible Oils,Cooking Oil,Fortune,8904234100402,Pcs,115.00,135.00,150.00,0,5,80,20,Adani Wilmar,SF01,2027-04-30,Refined healthy oil');
       buffer.writeln(
-          'RET-103,Digestive Multigrain Biscuits 250g,Snacks,Biscuits,Britannia,8904234100403,Pcs,35.00,45.00,50.00,0,5,120,25,Britannia Dist,DG01,2027-02-28,Fiber enriched');
+          'RET-103,Digestive Multigrain Biscuits 250g,Snacks & Biscuits,Biscuits,Britannia,8904234100403,Pcs,35.00,45.00,50.00,0,5,120,25,Britannia Dist,DG01,2027-02-28,Fiber enriched');
       buffer.writeln(
-          'RET-104,Bathing Beauty Soap Bar 4x100g,Personal Care,Soap,Dove,8904234100404,Pack,130.00,160.00,180.00,0,18,65,15,HUL Dist,DV04,2028-01-31,1/4 moisturizing cream');
+          'RET-104,Bathing Beauty Soap Bar 4x100g,Soaps & Detergents,Soaps,Dove,8904234100404,Pack,130.00,160.00,180.00,0,18,65,15,HUL Dist,DV04,2028-01-31,1/4 moisturizing cream');
       buffer.writeln(
-          'RET-105,Complete Care Toothpaste 150g,Oral Care,Dental,Colgate,8904234100405,Pcs,75.00,95.00,105.00,0,18,90,20,Colgate India,CG15,2027-12-31,Anti-cavity formula');
+          'RET-105,Complete Care Toothpaste 150g,Daily Needs,Oral Care,Colgate,8904234100405,Pcs,75.00,95.00,105.00,0,18,90,20,Colgate India,CG15,2027-12-31,Anti-cavity formula');
+      buffer.writeln(
+          'RET-106,Shudh Chakki Atta 5kg,Foodgrains & Staples,Flour,Aashirvaad,8904234100406,Kg,190.00,225.00,245.00,0,5,50,15,ITC Direct,AT5K,2027-08-31,100% whole wheat flour');
     } else {
       buffer.writeln(
           'ITEM-101,Standard Commercial Item Alpha,General,Goods,Standard Co,8907234100701,Pcs,150.00,250.00,299.00,0,18,50,15,Direct Vendor,B01,,High utility goods');
       buffer.writeln(
-          'ITEM-102,Multi-utility Pack Beta,Utility,Hardware,Apex Trade,8907234100702,Pcs,300.00,499.00,599.00,0,18,30,10,Apex Supplies,B02,,Standard packaging');
+          'ITEM-102,Multi-utility Pack Beta,General,Hardware,Apex Trade,8907234100702,Pcs,300.00,499.00,599.00,0,18,30,10,Apex Supplies,B02,,Standard packaging');
       buffer.writeln(
-          'ITEM-103,Commercial Goods Gamma,Custom,Trade,Prime Supply,8907234100703,Pcs,550.00,899.00,999.00,0,18,20,8,Prime Dist,B03,,Industrial quality');
+          'ITEM-103,Commercial Goods Gamma,General,Trade,Prime Supply,8907234100703,Pcs,550.00,899.00,999.00,0,18,20,8,Prime Dist,B03,,Industrial quality');
       buffer.writeln(
-          'ITEM-104,Universal Supply Delta,Supplies,General,Union Wholesale,8907234100704,Pcs,800.00,1200.00,1400.00,0,18,15,5,Union Corp,B04,,Wholesale certified');
+          'ITEM-104,Universal Supply Delta,General,General,Union Wholesale,8907234100704,Pcs,800.00,1200.00,1400.00,0,18,15,5,Union Corp,B04,,Wholesale certified');
     }
 
+    return buffer.toString();
+  }
+
+  /// Dynamically generates a clean blank CSV import template with store-specific hints
+  static String generateBlankTemplateCsv([String? shopTypeId]) {
+    final type = (shopTypeId ?? DatabaseHelper().activeStoreType).toLowerCase();
+    final buffer = StringBuffer();
+    buffer.writeln(
+        'Product Code,Product Name,Category,Subcategory,Brand,Barcode,Unit,Purchase Price,Selling Price,MRP,Discount,GST %,Opening Stock,Minimum Stock,Supplier,Batch,Expiry Date,Notes');
+
+    if (type == 'electronics') {
+      buffer.writeln(
+          ',,,Model / Spec,Brand Name,,Pcs,,,0,18,0,5,,,1 Year Brand Warranty');
+    } else if (type == 'medical' || type == 'pharmacy') {
+      buffer.writeln(
+          ',,,Generic / Salt,Manufacturer,,Strip,,,0,12,0,10,,BATCH-01,YYYY-MM-DD,');
+    } else if (type == 'clothing' || type == 'fashion') {
+      buffer.writeln(
+          ',,,Fit / Style,Brand Name,,Pcs,,,0,5,0,5,,,,Size M | Cotton');
+    } else if (type == 'grocery') {
+      buffer.writeln(
+          ',,,Item Form,Brand Name,,Kg,,,0,5,0,10,,,YYYY-MM-DD,');
+    } else {
+      buffer.writeln(
+          ',,,Subcategory,Brand Name,,Pcs,,,0,18,0,5,,,,');
+    }
     return buffer.toString();
   }
 
@@ -512,5 +548,108 @@ class ExcelImportService {
     }
     result.add(buffer.toString().trim());
     return result;
+  }
+
+  /// Re-validates a single imported row against store rules, existing products, and other file rows
+  static ImportRowResult validateRowData({
+    required int rowIndex,
+    required Map<String, dynamic> rawData,
+    required List<Product> existingProducts,
+    required Set<String> otherBarcodesInFile,
+    required Set<String> otherSkusInFile,
+    required String targetStoreId,
+  }) {
+    final name = (rawData['Product Name'] ?? rawData['name'] ?? '').toString().trim();
+    final sellingPriceRaw = (rawData['Selling Price'] ?? rawData['price'] ?? '').toString().trim();
+    final sellingPrice = _normalizePrice(sellingPriceRaw, -1.0);
+    final barcode = (rawData['Barcode'] ?? rawData['barcode'] ?? '').toString().trim();
+    final sku = (rawData['Product Code'] ?? rawData['sku'] ?? rawData['code'] ?? '').toString().trim();
+    final category = (rawData['Category'] ?? rawData['category'] ?? 'General').toString().trim();
+    final subcategory = (rawData['Subcategory'] ?? rawData['subcategory'] ?? '').toString().trim();
+    final brand = (rawData['Brand'] ?? rawData['brand'] ?? '').toString().trim();
+    final unit = (rawData['Unit'] ?? rawData['unit'] ?? 'Pcs').toString().trim();
+    final purchasePriceRaw = (rawData['Purchase Price'] ?? rawData['purchasePrice'] ?? '').toString().trim();
+    final purchasePrice = _normalizePrice(purchasePriceRaw, sellingPrice > 0 ? sellingPrice * 0.7 : 0.0);
+    final mrpRaw = (rawData['MRP'] ?? rawData['mrp'] ?? '').toString().trim();
+    final mrp = _normalizePrice(mrpRaw, sellingPrice > 0 ? sellingPrice : 0.0);
+    final discountRaw = (rawData['Discount'] ?? rawData['discount'] ?? '').toString().trim();
+    final discount = _normalizePrice(discountRaw, 0.0);
+    final gstRaw = (rawData['GST %'] ?? rawData['gstRate'] ?? '').toString().trim();
+    final gstRate = _normalizePrice(gstRaw, 0.0);
+    final stockRaw = (rawData['Opening Stock'] ?? rawData['currentStock'] ?? rawData['stock'] ?? '').toString().trim();
+    final openingStock = _normalizePrice(stockRaw, 0.0);
+    final minStockRaw = (rawData['Minimum Stock'] ?? rawData['minStock'] ?? '').toString().trim();
+    final minStock = _normalizePrice(minStockRaw, 5.0);
+    final supplier = (rawData['Supplier'] ?? rawData['supplier'] ?? '').toString().trim();
+    final batch = (rawData['Batch'] ?? rawData['batch'] ?? '').toString().trim();
+    final expiryDate = (rawData['Expiry Date'] ?? rawData['expiryDate'] ?? '').toString().trim();
+    final notes = (rawData['Notes'] ?? rawData['notes'] ?? '').toString().trim();
+
+    final errors = <String>[];
+    if (name.isEmpty) {
+      errors.add('Missing Product Name');
+    }
+    if (sellingPrice < 0) {
+      errors.add('Invalid Selling Price ($sellingPriceRaw)');
+    }
+
+    final storeExisting = existingProducts.where((p) => p.storeId == targetStoreId || p.storeId.isEmpty).toList();
+    final existingBarcodes = storeExisting.map((p) => p.barcode.trim().toLowerCase()).where((b) => b.isNotEmpty).toSet();
+    final existingSkus = storeExisting.map((p) => p.sku.trim().toLowerCase()).where((s) => s.isNotEmpty).toSet();
+
+    bool isDuplicate = false;
+    if (barcode.isNotEmpty) {
+      final bLower = barcode.toLowerCase();
+      if (existingBarcodes.contains(bLower) || otherBarcodesInFile.contains(bLower)) {
+        isDuplicate = true;
+        errors.add('Duplicate Barcode: $barcode');
+      }
+    }
+
+    if (sku.isNotEmpty && sku != barcode) {
+      final sLower = sku.toLowerCase();
+      if (existingSkus.contains(sLower) || otherSkusInFile.contains(sLower)) {
+        isDuplicate = true;
+        errors.add('Duplicate Product Code: $sku');
+      }
+    }
+
+    Product? product;
+    if (errors.isEmpty) {
+      final now = DateTime.now();
+      product = Product(
+        id: IdGenerator.generateId('prod'),
+        storeId: targetStoreId,
+        sku: sku.isNotEmpty ? sku : IdGenerator.generateId('sku'),
+        barcode: barcode,
+        name: name,
+        category: category.isNotEmpty ? category : 'General',
+        subcategory: subcategory.isNotEmpty ? subcategory : null,
+        brand: brand.isNotEmpty ? brand : null,
+        unit: unit.isNotEmpty ? unit : 'Pcs',
+        purchasePrice: purchasePrice >= 0 ? purchasePrice : 0.0,
+        sellingPrice: sellingPrice,
+        mrp: mrp > 0 ? mrp : sellingPrice,
+        discount: discount,
+        gstRate: gstRate,
+        currentStock: openingStock >= 0 ? openingStock : 0.0,
+        minStock: minStock,
+        supplierId: supplier.isNotEmpty ? supplier : null,
+        batch: batch.isNotEmpty ? batch : null,
+        expiryDate: expiryDate.isNotEmpty ? expiryDate : null,
+        notes: notes.isNotEmpty ? notes : null,
+        createdAt: now,
+        updatedAt: now,
+      );
+    }
+
+    return ImportRowResult(
+      rowIndex: rowIndex,
+      rawData: rawData,
+      product: product,
+      isValid: errors.isEmpty && product != null,
+      isDuplicate: isDuplicate,
+      errors: errors,
+    );
   }
 }

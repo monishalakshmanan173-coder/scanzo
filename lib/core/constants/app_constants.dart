@@ -22,6 +22,11 @@ class AppConstants {
     'Pack',
     'Dozen',
     'Meter',
+    'Strip',
+    'Bottle',
+    'Pair',
+    'Set',
+    'Can',
   ];
 
   // GST Rates in India

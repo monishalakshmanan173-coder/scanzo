@@ -2,10 +2,13 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:share_plus/share_plus.dart';
 import '../../../core/constants/app_colors.dart';
+import '../../../core/constants/app_constants.dart';
 import '../../../core/constants/app_typography.dart';
 import '../../../core/utils/currency_formatter.dart';
 import '../../../shared/widgets/scanzo_button.dart';
+import '../../../shared/widgets/scanzo_text_field.dart';
 import '../../../shared/widgets/empty_state_view.dart';
 import '../../../shared/widgets/status_badge.dart';
 import '../../../data/repositories/product_repository.dart';
@@ -111,6 +114,494 @@ class _ExcelImportScreenState extends State<ExcelImportScreen> with SingleTicker
     );
   }
 
+  void _showTemplateOptions() {
+    final currentStoreType = DatabaseHelper().activeStoreType;
+    final storeName = DatabaseHelper().activeStoreName;
+    final sampleCsv = ExcelImportService.generateSampleCsv(currentStoreType);
+    final blankCsv = ExcelImportService.generateBlankTemplateCsv(currentStoreType);
+
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Import Templates & Samples', style: AppTypography.h3),
+              const SizedBox(height: 4),
+              Text(
+                'Store: $storeName (${currentStoreType.toUpperCase()})',
+                style: AppTypography.caption.copyWith(color: AppColors.textSecondary),
+              ),
+              const SizedBox(height: 16),
+              ListTile(
+                leading: const CircleAvatar(
+                  backgroundColor: AppColors.softPeach,
+                  child: Icon(Icons.science_outlined, color: AppColors.softPeachDark),
+                ),
+                title: const Text('Sample Data File (.csv)'),
+                subtitle: const Text('Realistic sample products suited for this store type'),
+                trailing: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    IconButton(
+                      icon: const Icon(Icons.copy_rounded, size: 20),
+                      tooltip: 'Copy to Clipboard',
+                      onPressed: () {
+                        Navigator.pop(ctx);
+                        Clipboard.setData(ClipboardData(text: sampleCsv));
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text('Sample CSV for $storeName copied to clipboard!')),
+                        );
+                      },
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.share_rounded, size: 20),
+                      tooltip: 'Share / Save File',
+                      onPressed: () {
+                        Navigator.pop(ctx);
+                        Share.share(sampleCsv, subject: 'scanzo_${currentStoreType}_sample.csv');
+                      },
+                    ),
+                  ],
+                ),
+              ),
+              const Divider(),
+              ListTile(
+                leading: const CircleAvatar(
+                  backgroundColor: AppColors.softAqua,
+                  child: Icon(Icons.file_present_rounded, color: AppColors.softAquaDark),
+                ),
+                title: const Text('Blank Import Template (.csv)'),
+                subtitle: const Text('Empty CSV template with required & optional column headers'),
+                trailing: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    IconButton(
+                      icon: const Icon(Icons.copy_rounded, size: 20),
+                      tooltip: 'Copy to Clipboard',
+                      onPressed: () {
+                        Navigator.pop(ctx);
+                        Clipboard.setData(ClipboardData(text: blankCsv));
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('Blank template CSV copied to clipboard!')),
+                        );
+                      },
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.share_rounded, size: 20),
+                      tooltip: 'Share / Save File',
+                      onPressed: () {
+                        Navigator.pop(ctx);
+                        Share.share(blankCsv, subject: 'scanzo_${currentStoreType}_template.csv');
+                      },
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _showEditRowDialog(ImportRowResult row) {
+    final currentStoreType = DatabaseHelper().activeStoreType.toLowerCase();
+    final categories = _productRepo.getAllCategories(storeId: _productRepo.activeStoreId);
+    final categoryNames = categories.map((c) => c.name).toSet().toList();
+    if (categoryNames.isEmpty) {
+      categoryNames.add('General');
+    }
+
+    final raw = Map<String, dynamic>.from(row.rawData);
+    final initialName = (raw['Product Name'] ?? row.product?.name ?? '').toString();
+    final initialPrice = (raw['Selling Price'] ?? row.product?.sellingPrice.toString() ?? '').toString();
+    final initialMrp = (raw['MRP'] ?? row.product?.mrp.toString() ?? '').toString();
+    final initialCost = (raw['Purchase Price'] ?? row.product?.purchasePrice.toString() ?? '').toString();
+    final initialBarcode = (raw['Barcode'] ?? row.product?.barcode ?? '').toString();
+    final initialSku = (raw['Product Code'] ?? row.product?.sku ?? '').toString();
+    final initialBrand = (raw['Brand'] ?? row.product?.brand ?? '').toString();
+    final initialSubcat = (raw['Subcategory'] ?? row.product?.subcategory ?? '').toString();
+    final initialUnit = (raw['Unit'] ?? row.product?.unit ?? 'Pcs').toString();
+    final initialStock = (raw['Opening Stock'] ?? row.product?.currentStock.toString() ?? '10').toString();
+    final initialMinStock = (raw['Minimum Stock'] ?? row.product?.minStock.toString() ?? '5').toString();
+    final initialBatch = (raw['Batch'] ?? row.product?.batch ?? '').toString();
+    final initialExpiry = (raw['Expiry Date'] ?? row.product?.expiryDate ?? '').toString();
+    final initialNotes = (raw['Notes'] ?? row.product?.notes ?? '').toString();
+    final initialCategory = (raw['Category'] ?? row.product?.category ?? categoryNames.first).toString();
+
+    final nameCtrl = TextEditingController(text: initialName);
+    final priceCtrl = TextEditingController(text: initialPrice);
+    final mrpCtrl = TextEditingController(text: initialMrp);
+    final costCtrl = TextEditingController(text: initialCost);
+    final barcodeCtrl = TextEditingController(text: initialBarcode);
+    final skuCtrl = TextEditingController(text: initialSku);
+    final brandCtrl = TextEditingController(text: initialBrand);
+    final subcatCtrl = TextEditingController(text: initialSubcat);
+    final stockCtrl = TextEditingController(text: initialStock);
+    final minStockCtrl = TextEditingController(text: initialMinStock);
+    final batchCtrl = TextEditingController(text: initialBatch);
+    final expiryCtrl = TextEditingController(text: initialExpiry);
+    final notesCtrl = TextEditingController(text: initialNotes);
+
+    if (initialCategory.isNotEmpty && !categoryNames.contains(initialCategory)) {
+      categoryNames.insert(0, initialCategory);
+    }
+    String selectedCategory = categoryNames.contains(initialCategory) ? initialCategory : categoryNames.first;
+
+    final unitOptions = List<String>.from(AppConstants.productUnits);
+    if (initialUnit.isNotEmpty && !unitOptions.contains(initialUnit)) {
+      unitOptions.add(initialUnit);
+    }
+    String selectedUnit = unitOptions.contains(initialUnit) ? initialUnit : 'Pcs';
+
+    String subcatLabel = 'Subcategory / Model';
+    String notesLabel = 'Warranty / Notes';
+    if (currentStoreType == 'electronics') {
+      subcatLabel = 'Model / Number';
+      notesLabel = 'Warranty / Technical Specs';
+    } else if (currentStoreType == 'medical' || currentStoreType == 'pharmacy') {
+      subcatLabel = 'Salt / Generic Name';
+      notesLabel = 'Storage / Dosage Instructions';
+    } else if (currentStoreType == 'clothing' || currentStoreType == 'fashion') {
+      subcatLabel = 'Style / Fit';
+      notesLabel = 'Size & Fabric Details';
+    } else if (currentStoreType == 'grocery') {
+      subcatLabel = 'Variety / Grade';
+      notesLabel = 'Shelf Life / Storage';
+    }
+
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: Row(
+            children: [
+              const Icon(Icons.edit_note_rounded, color: AppColors.primaryPinkDark, size: 28),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text('Edit Row #${row.rowIndex}', style: AppTypography.h3),
+              ),
+            ],
+          ),
+          content: SizedBox(
+            width: 520,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  ScanzoTextField(
+                    label: 'Product Name *',
+                    hint: 'e.g. Item Name',
+                    controller: nameCtrl,
+                  ),
+                  const SizedBox(height: 10),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: ScanzoTextField(
+                          label: 'Selling Price (₹) *',
+                          hint: '100.00',
+                          controller: priceCtrl,
+                          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: ScanzoTextField(
+                          label: 'MRP (₹)',
+                          hint: '120.00',
+                          controller: mrpCtrl,
+                          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: ScanzoTextField(
+                          label: 'Purchase Cost (₹)',
+                          hint: '70.00',
+                          controller: costCtrl,
+                          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: ScanzoTextField(
+                          label: 'Opening Stock',
+                          hint: '10',
+                          controller: stockCtrl,
+                          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: ScanzoTextField(
+                          label: 'Barcode',
+                          hint: '890...',
+                          controller: barcodeCtrl,
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: ScanzoTextField(
+                          label: 'Product Code / SKU',
+                          hint: 'SKU-001',
+                          controller: skuCtrl,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  Row(
+                    children: [
+                      Expanded(
+                        flex: 3,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text('Category', style: AppTypography.bodySmall.copyWith(fontWeight: FontWeight.bold)),
+                            const SizedBox(height: 6),
+                            DropdownButtonFormField<String>(
+                              value: selectedCategory,
+                              isExpanded: true,
+                              decoration: const InputDecoration(filled: true, fillColor: AppColors.surfaceWhite),
+                              items: categoryNames.map((c) => DropdownMenuItem(value: c, child: Text(c, overflow: TextOverflow.ellipsis))).toList(),
+                              onChanged: (val) {
+                                if (val != null) setDialogState(() => selectedCategory = val);
+                              },
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        flex: 2,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text('Unit', style: AppTypography.bodySmall.copyWith(fontWeight: FontWeight.bold)),
+                            const SizedBox(height: 6),
+                            DropdownButtonFormField<String>(
+                              value: selectedUnit,
+                              isExpanded: true,
+                              decoration: const InputDecoration(filled: true, fillColor: AppColors.surfaceWhite),
+                              items: unitOptions.map((u) => DropdownMenuItem(value: u, child: Text(u))).toList(),
+                              onChanged: (val) {
+                                if (val != null) setDialogState(() => selectedUnit = val);
+                              },
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: ScanzoTextField(
+                          label: 'Brand',
+                          hint: 'e.g. Brand Name',
+                          controller: brandCtrl,
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: ScanzoTextField(
+                          label: subcatLabel,
+                          hint: 'Model / Subcategory',
+                          controller: subcatCtrl,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  ScanzoTextField(
+                    label: notesLabel,
+                    hint: 'Warranty, specifications, size, or notes',
+                    controller: notesCtrl,
+                  ),
+                  if (currentStoreType == 'medical' || currentStoreType == 'pharmacy') ...[
+                    const SizedBox(height: 10),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: ScanzoTextField(
+                            label: 'Batch No',
+                            hint: 'BATCH-01',
+                            controller: batchCtrl,
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: ScanzoTextField(
+                            label: 'Expiry Date',
+                            hint: 'YYYY-MM-DD',
+                            controller: expiryCtrl,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                _saveRowEdit(
+                  originalRow: row,
+                  updatedName: nameCtrl.text.trim(),
+                  updatedPrice: priceCtrl.text.trim(),
+                  updatedMrp: mrpCtrl.text.trim(),
+                  updatedCost: costCtrl.text.trim(),
+                  updatedBarcode: barcodeCtrl.text.trim(),
+                  updatedSku: skuCtrl.text.trim(),
+                  updatedBrand: brandCtrl.text.trim(),
+                  updatedSubcategory: subcatCtrl.text.trim(),
+                  updatedCategory: selectedCategory,
+                  updatedUnit: selectedUnit,
+                  updatedStock: stockCtrl.text.trim(),
+                  updatedMinStock: minStockCtrl.text.trim(),
+                  updatedBatch: batchCtrl.text.trim(),
+                  updatedExpiry: expiryCtrl.text.trim(),
+                  updatedNotes: notesCtrl.text.trim(),
+                );
+                Navigator.pop(ctx);
+              },
+              style: ElevatedButton.styleFrom(backgroundColor: AppColors.primaryPinkDark),
+              child: const Text('Save Changes', style: TextStyle(color: Colors.white)),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _saveRowEdit({
+    required ImportRowResult originalRow,
+    required String updatedName,
+    required String updatedPrice,
+    required String updatedMrp,
+    required String updatedCost,
+    required String updatedBarcode,
+    required String updatedSku,
+    required String updatedBrand,
+    required String updatedSubcategory,
+    required String updatedCategory,
+    required String updatedUnit,
+    required String updatedStock,
+    required String updatedMinStock,
+    required String updatedBatch,
+    required String updatedExpiry,
+    required String updatedNotes,
+  }) {
+    if (_analysis == null) return;
+
+    final targetStoreId = _productRepo.activeStoreId;
+    final existingProducts = _productRepo.getAllProducts(storeId: targetStoreId);
+
+    final allRows = [
+      ..._analysis!.validRows,
+      ..._analysis!.invalidRows,
+      ..._analysis!.duplicateRows,
+    ];
+
+    final otherBarcodes = <String>{};
+    final otherSkus = <String>{};
+    for (var r in allRows) {
+      if (r.rowIndex == originalRow.rowIndex) continue;
+      final bc = (r.rawData['Barcode'] ?? r.product?.barcode ?? '').toString().trim().toLowerCase();
+      if (bc.isNotEmpty) otherBarcodes.add(bc);
+      final sku = (r.rawData['Product Code'] ?? r.product?.sku ?? '').toString().trim().toLowerCase();
+      if (sku.isNotEmpty) otherSkus.add(sku);
+    }
+
+    final newRawData = Map<String, dynamic>.from(originalRow.rawData);
+    newRawData['Product Name'] = updatedName;
+    newRawData['Selling Price'] = updatedPrice;
+    newRawData['MRP'] = updatedMrp;
+    newRawData['Purchase Price'] = updatedCost;
+    newRawData['Barcode'] = updatedBarcode;
+    newRawData['Product Code'] = updatedSku;
+    newRawData['Brand'] = updatedBrand;
+    newRawData['Subcategory'] = updatedSubcategory;
+    newRawData['Category'] = updatedCategory;
+    newRawData['Unit'] = updatedUnit;
+    newRawData['Opening Stock'] = updatedStock;
+    newRawData['Minimum Stock'] = updatedMinStock;
+    newRawData['Batch'] = updatedBatch;
+    newRawData['Expiry Date'] = updatedExpiry;
+    newRawData['Notes'] = updatedNotes;
+
+    final updatedResult = ExcelImportService.validateRowData(
+      rowIndex: originalRow.rowIndex,
+      rawData: newRawData,
+      existingProducts: existingProducts,
+      otherBarcodesInFile: otherBarcodes,
+      otherSkusInFile: otherSkus,
+      targetStoreId: targetStoreId,
+    );
+
+    setState(() {
+      final valid = List<ImportRowResult>.from(_analysis!.validRows);
+      final invalid = List<ImportRowResult>.from(_analysis!.invalidRows);
+      final duplicate = List<ImportRowResult>.from(_analysis!.duplicateRows);
+
+      valid.removeWhere((r) => r.rowIndex == originalRow.rowIndex);
+      invalid.removeWhere((r) => r.rowIndex == originalRow.rowIndex);
+      duplicate.removeWhere((r) => r.rowIndex == originalRow.rowIndex);
+
+      if (updatedResult.isDuplicate) {
+        duplicate.add(updatedResult);
+        duplicate.sort((a, b) => a.rowIndex.compareTo(b.rowIndex));
+      } else if (updatedResult.isValid) {
+        valid.add(updatedResult);
+        valid.sort((a, b) => a.rowIndex.compareTo(b.rowIndex));
+      } else {
+        invalid.add(updatedResult);
+        invalid.sort((a, b) => a.rowIndex.compareTo(b.rowIndex));
+      }
+
+      _analysis = ImportAnalysis(
+        totalRows: _analysis!.totalRows,
+        validRows: valid,
+        invalidRows: invalid,
+        duplicateRows: duplicate,
+        detectedHeaders: _analysis!.detectedHeaders,
+        missingRequiredHeaders: _analysis!.missingRequiredHeaders,
+      );
+    });
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Row #${originalRow.rowIndex} updated successfully.'),
+        duration: const Duration(seconds: 2),
+      ),
+    );
+  }
+
   Future<void> _confirmAndImport() async {
     if (_analysis == null || _analysis!.validRows.isEmpty) return;
 
@@ -198,6 +689,11 @@ class _ExcelImportScreenState extends State<ExcelImportScreen> with SingleTicker
           onPressed: () => Navigator.pop(context),
         ),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.file_download_outlined),
+            tooltip: 'Download / Copy Template',
+            onPressed: _showTemplateOptions,
+          ),
           IconButton(
             icon: const Icon(Icons.content_copy_rounded),
             tooltip: 'Copy Sample CSV Format',
@@ -487,6 +983,23 @@ class _ExcelImportScreenState extends State<ExcelImportScreen> with SingleTicker
                   ),
                 ),
               ],
+
+              const SizedBox(height: 6),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  TextButton.icon(
+                    onPressed: () => _showEditRowDialog(row),
+                    icon: const Icon(Icons.edit_outlined, size: 16),
+                    label: const Text('Edit Row', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                    style: TextButton.styleFrom(
+                      foregroundColor: AppColors.primaryPinkDark,
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                      visualDensity: VisualDensity.compact,
+                    ),
+                  ),
+                ],
+              ),
             ],
           ),
         );
