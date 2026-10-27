@@ -24,22 +24,30 @@ class DefaultFirebaseOptions {
 
   /// Returns true only if valid non-placeholder Firebase credentials are configured.
   static bool get isConfigured {
-    final key = currentPlatform.apiKey;
-    return key.isNotEmpty && !key.toLowerCase().contains('placeholder');
+    final options = currentPlatform;
+    final key = options.apiKey;
+    final appId = options.appId;
+    final projectId = options.projectId;
+
+    final isKeyValid = key.isNotEmpty && !key.toLowerCase().contains('placeholder');
+    final isAppIdValid = appId.isNotEmpty && !appId.toLowerCase().contains('placeholder');
+    final isProjectValid = projectId.isNotEmpty && !projectId.toLowerCase().contains('placeholder');
+
+    return isKeyValid && isAppIdValid && isProjectValid;
   }
 
   static const FirebaseOptions web = FirebaseOptions(
     apiKey: String.fromEnvironment(
       'FIREBASE_WEB_API_KEY',
-      defaultValue: 'AIzaSyScanzoBillingAppApiKeyPlaceholder',
+      defaultValue: 'AIzaSyA5VykTxHEj0FsFzS-OtKIuCgo4XN06Gnk',
     ),
     appId: String.fromEnvironment(
       'FIREBASE_WEB_APP_ID',
-      defaultValue: '1:102938475612:web:scanzo1234567890abcdef',
+      defaultValue: '1:532856431533:web:a99e3aecc3350fc33a3724',
     ),
     messagingSenderId: String.fromEnvironment(
       'FIREBASE_MESSAGING_SENDER_ID',
-      defaultValue: '102938475612',
+      defaultValue: '532856431533',
     ),
     projectId: String.fromEnvironment(
       'FIREBASE_PROJECT_ID',
@@ -51,7 +59,11 @@ class DefaultFirebaseOptions {
     ),
     storageBucket: String.fromEnvironment(
       'FIREBASE_STORAGE_BUCKET',
-      defaultValue: 'scanzo-billing.appspot.com',
+      defaultValue: 'scanzo-billing.firebasestorage.app',
+    ),
+    measurementId: String.fromEnvironment(
+      'FIREBASE_MEASUREMENT_ID',
+      defaultValue: 'G-YCTLHWHEDQ',
     ),
   );
 
